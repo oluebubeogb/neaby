@@ -19,6 +19,7 @@ const form = useForm({
     category_id: props.product?.category_id ?? null,
     condition: props.product?.condition ?? 'new',
     quantity: props.product?.quantity ?? 1,
+    options_text: props.product?.options_text ?? '',
     city: props.product?.city ?? props.defaults?.city ?? '',
     state: props.product?.state ?? props.defaults?.state ?? '',
     images: [],
@@ -180,7 +181,7 @@ const reviewNote = computed(() => props.product?.status === 'rejected' && props.
                 <!-- Photos -->
                 <section class="surface p-5 md:p-6">
                     <div class="mb-3 flex items-center justify-between">
-                        <h2 class="font-display text-lg font-bold">Photos</h2>
+                        <h2 class="font-display text-base font-bold">Photos</h2>
                         <span class="text-sm text-ink-500">{{ total }}/{{ limits.max_images }}</span>
                     </div>
                     <div class="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
@@ -289,6 +290,12 @@ const reviewNote = computed(() => props.product?.status === 'rejected' && props.
                         <label class="label" for="quantity">Quantity in stock</label>
                         <input id="quantity" v-model="form.quantity" type="number" min="0" inputmode="numeric" class="input" />
                         <InputError :message="form.errors.quantity" />
+                    </div>
+                    <div>
+                        <label class="label" for="options_text">Options <span class="font-normal text-ink-400">(optional — one per line)</span></label>
+                        <textarea id="options_text" v-model="form.options_text" rows="2" maxlength="1000" class="input font-mono text-[13px]" placeholder="Size: S, M, L, XL&#10;Colour: Black, White" />
+                        <p class="hint">Buyers must pick one of each before adding to cart.</p>
+                        <InputError :message="form.errors.options_text" />
                     </div>
                     <div class="space-y-2 rounded-2xl bg-ink-50 p-3">
                         <label class="flex items-center gap-2 text-sm font-medium"><input v-model="form.checkout_enabled" type="checkbox" class="rounded text-brand-600" /> Buyers can pay on neaby</label>

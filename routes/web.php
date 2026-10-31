@@ -17,7 +17,10 @@ use App\Http\Controllers\InboxController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\Messaging\CallsController;
+use App\Http\Controllers\Messaging\MessagesController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\QrController;
 use App\Http\Controllers\PublicProfileController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\Sell;
@@ -35,6 +38,7 @@ Route::get('/categories', [CategoryController::class, 'index'])->name('categorie
 Route::get('/c/{category:slug}', [CategoryController::class, 'show'])->name('categories.show');
 Route::get('/p/{product:slug}', [ProductController::class, 'show'])->name('products.show');
 Route::get('/s/{store:slug}', [StorefrontController::class, 'show'])->name('stores.show');
+Route::get('/p/{product:slug}/peek', [ProductController::class, 'peek'])->middleware('throttle:120,1')->name('products.peek');
 Route::get('/u/{username}', [PublicProfileController::class, 'show'])->name('users.show')->where('username', '@?[A-Za-z0-9_]+');
 
 // Phase 2 — share cards (PNG, 1080×1080 / 1080×1920 / 1200×630) and QR codes. Public, cacheable.
@@ -50,6 +54,13 @@ Route::post('/events/share', [ShareController::class, 'event'])->middleware('thr
 // Phase 6 — public reseller offer pages (always point at the original product).
 Route::get('/r/{listing:slug}', [OfferPageController::class, 'show'])->name('offers.show');
 Route::post('/r/{listing:slug}/enquire', [OfferPageController::class, 'enquire'])->middleware('throttle:events')->name('offers.enquire');
+
+// Seller QR codes (scan → product, optional discount / preset qty & size).
+Route::get('/q/{qr}.png', [QrController::class, 'png'])->middleware('throttle:shares')->name('q.png')->where('qr', '[a-z0-9]{6,16}');
+Route::get('/q/{qr}', [QrController::class, 'show'])->name('q.show')->where('qr', '[a-z0-9]{6,16}');
+
+// Live username / email availability (sign-up + settings). Same rules as save.
+Route::get('/availability', [ProfileController::class, 'availability'])->middleware('throttle:60,1')->name('profile.availability');
 
 Route::get('/sitemap.xml', [SitemapController::class, 'index'])->name('sitemap');
 Route::get('/robots.txt', [SitemapController::class, 'robots'])->name('robots');
@@ -114,7 +125,27 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile.show');
     Route::get('/profile/settings', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::post('/profile/settings', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->middleware('throttle:5,1')->name('profile.destroy');
+    Route::get('/profile/delete/confirm', [ProfileController::class, 'confirmDestroy'])->middleware('signed')->name('profile.destroy.confirm');
+    Route::post('/profile/delete/confirm', [ProfileController::class, 'finalDestroy'])->middleware('signed')->name('profile.destroy.final');
+
+    // In-app messaging (1:1) + voice calls (WebRTC, HTTP-polled signalling).
+    Route::get('/messages', [MessagesController::class, 'index'])->name('messages.index');
+    Route::post('/messages/start', [MessagesController::class, 'start'])->middleware('throttle:30,1')->name('messages.start');
+    Route::get('/messages/pulse', [MessagesController::class, 'pulse'])->name('messages.pulse');
+    Route::get('/messages/media/{message}', [MessagesController::class, 'media'])->name('messages.media');
+    Route::get('/messages/{conversation}', [MessagesController::class, 'index'])->name('messages.show');
+    Route::get('/messages/{conversation}/feed', [MessagesController::class, 'feed'])->name('messages.feed');
+    Route::post('/messages/{conversation}', [MessagesController::class, 'send'])->name('messages.send');
+    Route::post('/messages/{conversation}/call', [CallsController::class, 'start'])->middleware('throttle:10,1')->name('calls.start');
+    Route::get('/calls/{call}', [CallsController::class, 'show'])->name('calls.show');
+    Route::post('/calls/{call}/answer', [CallsController::class, 'answer'])->name('calls.answer');
+    Route::post('/calls/{call}/decline', [CallsController::class, 'decline'])->name('calls.decline');
+    Route::post('/calls/{call}/end', [CallsController::class, 'end'])->name('calls.end');
+    Route::post('/calls/{call}/signal', [CallsController::class, 'signal'])->middleware('throttle:600,1')->name('calls.signal');
+    Route::get('/calls/{call}/signals', [CallsController::class, 'signals'])->name('calls.signals');
+
+    Route::post('/q/{qr}/add', [QrController::class, 'add'])->middleware('throttle:checkout')->name('q.add')->where('qr', '[a-z0-9]{6,16}');
 
     Route::prefix('sell')->name('sell.')->group(function () {
         Route::get('/', Sell\DashboardController::class)->name('dashboard');
@@ -135,6 +166,11 @@ Route::middleware('auth')->group(function () {
         Route::post('/ai/titles', [Sell\AiController::class, 'titles'])->middleware('throttle:ai')->name('ai.titles');
         Route::post('/ai/description', [Sell\AiController::class, 'description'])->middleware('throttle:ai')->name('ai.description');
         Route::post('/pricing', [Sell\AiController::class, 'pricing'])->middleware('throttle:ai')->name('pricing');
+
+        Route::get('/qr', [Sell\QrController::class, 'index'])->name('qr.index');
+        Route::post('/qr', [Sell\QrController::class, 'store'])->name('qr.store');
+        Route::post('/qr/{qr}', [Sell\QrController::class, 'update'])->name('qr.update');
+        Route::delete('/qr/{qr}', [Sell\QrController::class, 'destroy'])->name('qr.destroy');
 
         // Phase 4 — seller orders
         Route::get('/orders', [Sell\OrderController::class, 'index'])->name('orders.index');

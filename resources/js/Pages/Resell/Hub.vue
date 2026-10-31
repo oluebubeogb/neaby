@@ -20,11 +20,11 @@ const go = () => router.get(route('resell.index'), search.value ? { q: search.va
             <Link :href="route('requests.index')" class="btn-ghost btn-sm"><Inbox :size="14" /> Requests</Link>
         </template>
         <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-            <div class="surface p-4"><div class="text-xs text-ink-500">Offers</div><div class="font-display text-2xl font-extrabold">{{ stats.offers }}</div></div>
-            <div class="surface p-4"><div class="text-xs text-ink-500">Active</div><div class="font-display text-2xl font-extrabold">{{ stats.active }}</div></div>
-            <div class="surface p-4"><div class="flex items-center gap-1 text-xs text-ink-500"><Eye :size="12" /> Views 30d</div><div class="font-display text-2xl font-extrabold">{{ stats.views_30d }}</div></div>
-            <div class="surface p-4"><div class="flex items-center gap-1 text-xs text-ink-500"><Share2 :size="12" /> Shares 30d</div><div class="font-display text-2xl font-extrabold">{{ stats.shares_30d }}</div></div>
-            <div class="surface p-4"><div class="flex items-center gap-1 text-xs text-ink-500"><MessageCircle :size="12" /> Enquiries 30d</div><div class="font-display text-2xl font-extrabold">{{ stats.enquiries_30d }}</div></div>
+            <div class="surface p-4"><div class="text-xs text-ink-500">Offers</div><div class="font-display text-xl font-extrabold">{{ stats.offers }}</div></div>
+            <div class="surface p-4"><div class="text-xs text-ink-500">Active</div><div class="font-display text-xl font-extrabold">{{ stats.active }}</div></div>
+            <div class="surface p-4"><div class="flex items-center gap-1 text-xs text-ink-500"><Eye :size="12" /> Views 30d</div><div class="font-display text-xl font-extrabold">{{ stats.views_30d }}</div></div>
+            <div class="surface p-4"><div class="flex items-center gap-1 text-xs text-ink-500"><Share2 :size="12" /> Shares 30d</div><div class="font-display text-xl font-extrabold">{{ stats.shares_30d }}</div></div>
+            <div class="surface p-4"><div class="flex items-center gap-1 text-xs text-ink-500"><MessageCircle :size="12" /> Enquiries 30d</div><div class="font-display text-xl font-extrabold">{{ stats.enquiries_30d }}</div></div>
         </div>
         <div class="mb-4 flex gap-2 md:hidden"><Link :href="route('resell.offers.index')" class="btn-ghost btn-sm flex-1">My offers</Link><Link :href="route('requests.index')" class="btn-ghost btn-sm flex-1">Requests</Link></div>
         <form class="relative mb-4" @submit.prevent="go"><Search :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" /><input v-model="search" class="input pl-10" placeholder="Search supplier products" /></form>

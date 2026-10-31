@@ -17,7 +17,7 @@ const go = (outcome) => { busy.value = true; router.post(route('payments.fake.co
         <div class="surface w-full max-w-sm p-6 text-center">
             <Wordmark size="md" class="mx-auto" />
             <p class="mt-4 text-sm text-ink-500">{{ payment.description }}</p>
-            <div class="mt-2 font-display text-4xl font-extrabold">{{ payment.amount }}</div>
+            <div class="mt-2 font-display text-3xl font-extrabold">{{ payment.amount }}</div>
             <div class="mt-1 text-xs text-ink-400">Ref {{ payment.reference }}</div>
             <div v-if="payment.status === 'pending'" class="mt-6 grid gap-2">
                 <button class="btn-primary btn-lg" :disabled="busy" @click="go('paid')"><ShieldCheck :size="18" /> Simulate successful payment</button>

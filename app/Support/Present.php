@@ -73,6 +73,7 @@ class Present
             'description' => $p->description,
             'quantity' => $p->quantity,
             'available' => $p->available(),
+            'options' => array_values($p->options ?? []),
             'views' => $p->views_count,
             'saves' => (int) $p->saves_count,
             'shares' => (int) $p->shares_count,

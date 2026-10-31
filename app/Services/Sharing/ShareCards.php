@@ -22,7 +22,7 @@ class ShareCards
         'landscape' => [1200, 630],
     ];
 
-    private const VERSION = 'v3';
+    private const VERSION = 'v4';
 
     public function __construct(private readonly QrCodes $qr) {}
 
@@ -120,6 +120,10 @@ class ShareCards
         return imagecolorallocatealpha($im, $r, $g, $b, $alpha);
     }
 
+    /**
+     * Layout: the photo is the message (~80% of the card), with a slim white
+     * band carrying price + title and a sleek QR tile that overlaps the photo.
+     */
     private function render(string $format, array $d): string
     {
         [$W, $H] = self::FORMATS[$format] ?? self::FORMATS['square'];
@@ -127,73 +131,148 @@ class ShareCards
         imagealphablending($im, true);
         imagesavealpha($im, false);
         imagefilledrectangle($im, 0, 0, $W, $H, $this->color($im, '#ffffff'));
+        $bold = $this->font('PlusJakartaSans-ExtraBold');
+        $med = $this->font('PlusJakartaSans-Medium');
+        $ink = $this->color($im, '#0f172a');
+        $muted = $this->color($im, '#64748b');
+        $green = $this->color($im, '#059669');
 
-        $landscape = $format === 'landscape';
-        $pad = $landscape ? 48 : 64;
-
-        // Image region.
-        [$ix, $iy, $iw, $ih] = $landscape ? [0, 0, (int) ($W * 0.48), $H] : [0, 0, $W, (int) ($H * ($format === 'portrait' ? 0.6 : 0.56))];
-        $this->drawCover($im, $d['image'], $ix, $iy, $iw, $ih, $d['accent'], $d['title']);
-
-        // Badge on the image.
-        if (! empty($d['badge'])) {
-            $this->pill($im, $ix + $pad - 16, $iy + $pad - 16, $d['badge'], 26, '#ffffff', '#0f172a');
-        }
-
-        // Text panel.
-        $tx = $landscape ? $iw + $pad : $pad;
-        $tw = ($landscape ? $W - $iw : $W) - 2 * $pad;
-        $ty = $landscape ? $pad + 20 : $ih + $pad;
-        $qrSize = $landscape ? 170 : ($format === 'portrait' ? 230 : 200);
-        $textWidth = $landscape ? $tw : $tw - $qrSize - 32;
-
-        $titleSize = $landscape ? 38 : 46;
-        $lines = $this->wrap($d['title'], $this->font('PlusJakartaSans-ExtraBold'), $titleSize, $textWidth, 2);
-        $y = $ty + $titleSize;
-        foreach ($lines as $line) {
-            imagettftext($im, $titleSize, 0, $tx, $y, $this->color($im, '#0f172a'), $this->font('PlusJakartaSans-ExtraBold'), $line);
-            $y += (int) ($titleSize * 1.32);
-        }
-
-        if (! empty($d['price'])) {
-            $y += 12;
-            $ps = $landscape ? 50 : 60;
-            imagettftext($im, $ps, 0, $tx, $y + $ps, $this->color($im, '#059669'), $this->font('PlusJakartaSans-ExtraBold'), $d['price']);
-            if (! empty($d['compare'])) {
-                $box = imagettfbbox($ps, 0, $this->font('PlusJakartaSans-ExtraBold'), $d['price']);
-                $cx = $tx + ($box[2] - $box[0]) + 24;
-                imagettftext($im, 30, 0, $cx, $y + $ps, $this->color($im, '#94a3b8'), $this->font('PlusJakartaSans-Medium'), $d['compare']);
-                $cb = imagettfbbox(30, 0, $this->font('PlusJakartaSans-Medium'), $d['compare']);
-                imagefilledrectangle($im, $cx, $y + $ps - 11, $cx + ($cb[2] - $cb[0]), $y + $ps - 9, $this->color($im, '#94a3b8'));
+        if ($format === 'landscape') {
+            $iw = (int) round($W * 0.8);
+            $this->drawCover($im, $d['image'], 0, 0, $iw, $H, $d['accent'], $d['title']);
+            $this->brandPill($im, 28, 28, 26);
+            if (! empty($d['badge'])) {
+                $this->pill($im, $iw - 28 - $this->pillWidth($d['badge'], 18), 28, $d['badge'], 18, '#ffffff', '#0f172a');
             }
-            $y += $ps + 24;
+            // Right rail: QR tile, price, title.
+            $px = $iw + 20;
+            $pw = $W - $iw - 40;
+            $tile = $pw;
+            $this->qrTile($im, $d['url'], $px, 28, $tile);
+            $y = 28 + $tile + 40;
+            if (! empty($d['price'])) {
+                $size = $this->fit($d['price'], $bold, 30, $pw);
+                imagettftext($im, $size, 0, $px, $y, $green, $bold, $d['price']);
+                $y += 34;
+            }
+            foreach ($this->wrap($d['title'], $med, 17, $pw, 3) as $line) {
+                imagettftext($im, 17, 0, $px, $y, $ink, $med, $line);
+                $y += 25;
+            }
+            if (! empty($d['subtitle'])) {
+                $sub = $this->wrap($d['subtitle'], $med, 14, $pw, 1)[0] ?? '';
+                imagettftext($im, 14, 0, $px, min($H - 24, $y + 8), $muted, $med, $sub);
+            }
+        } else {
+            $ih = (int) round($H * 0.8);
+            $this->drawCover($im, $d['image'], 0, 0, $W, $ih, $d['accent'], $d['title']);
+            $this->brandPill($im, 40, 40, 34);
+            if (! empty($d['badge'])) {
+                $this->pill($im, $W - 40 - $this->pillWidth($d['badge'], 24), 40, $d['badge'], 24, '#ffffff', '#0f172a');
+            }
+            $band = $H - $ih;
+            $tile = (int) round($band * 1.12);
+            $pad = 44;
+            $qx = $W - $pad - $tile;
+            $qy = $H - $pad + 8 - $tile;
+            $this->qrTile($im, $d['url'], $qx, $qy, $tile);
+
+            $tw = $qx - $pad - 32;
+            $priceSize = $format === 'portrait' ? 54 : 46;
+            $titleSize = $format === 'portrait' ? 28 : 25;
+            $subSize = $format === 'portrait' ? 21 : 19;
+            $hasPrice = ! empty($d['price']);
+            $titleLines = $this->wrap($d['title'], $hasPrice ? $med : $bold, $hasPrice ? $titleSize : $priceSize - 10, $tw, 1);
+            $blockH = ($hasPrice ? $priceSize + 18 : 0) + ($hasPrice ? $titleSize : $priceSize - 10) + 14 + $subSize;
+            $y = $ih + (int) (($band - $blockH) / 2);
+            if ($hasPrice) {
+                $y += $priceSize;
+                imagettftext($im, $priceSize, 0, $pad, $y, $green, $bold, $d['price']);
+                if (! empty($d['compare'])) {
+                    $box = imagettfbbox($priceSize, 0, $bold, $d['price']);
+                    $cx = $pad + ($box[2] - $box[0]) + 20;
+                    imagettftext($im, $subSize + 2, 0, $cx, $y, $this->color($im, '#94a3b8'), $med, $d['compare']);
+                    $cb = imagettfbbox($subSize + 2, 0, $med, $d['compare']);
+                    imagefilledrectangle($im, $cx, $y - (int) ($subSize * 0.38), $cx + ($cb[2] - $cb[0]), $y - (int) ($subSize * 0.38) + 2, $this->color($im, '#94a3b8'));
+                }
+                $y += 18;
+            }
+            $ts = $hasPrice ? $titleSize : $priceSize - 10;
+            $y += $ts;
+            imagettftext($im, $ts, 0, $pad, $y, $ink, $hasPrice ? $med : $bold, $titleLines[0] ?? '');
+            if (! empty($d['subtitle'])) {
+                $y += 14 + $subSize;
+                $sub = $this->wrap($d['subtitle'], $med, $subSize, $tw, 1)[0] ?? '';
+                imagettftext($im, $subSize, 0, $pad, $y, $muted, $med, $sub);
+            }
         }
-
-        if (! empty($d['subtitle'])) {
-            $sub = $this->wrap($d['subtitle'], $this->font('PlusJakartaSans-Medium'), 28, $textWidth, 1)[0] ?? '';
-            imagettftext($im, 28, 0, $tx, $y + 34, $this->color($im, '#475569'), $this->font('PlusJakartaSans-Medium'), $sub);
-        }
-
-        // Wordmark bottom-left (Comfortaa, lowercase) + green dot.
-        $wm = 44;
-        $wy = $H - $pad + ($landscape ? 4 : 0);
-        imagettftext($im, $wm, 0, $tx, $wy, $this->color($im, '#0f172a'), $this->font('Comfortaa-Bold'), 'neaby');
-        $wb = imagettfbbox($wm, 0, $this->font('Comfortaa-Bold'), 'neaby');
-        $dot = (int) ($wm * 0.3);
-        imagefilledellipse($im, $tx + ($wb[2] - $wb[0]) + $dot, $wy - (int) ($dot / 2), $dot, $dot, $this->color($im, '#16b26a'));
-
-        // QR bottom-right.
-        $qr = imagecreatefromstring($this->qr->png($d['url'], 8));
-        $qx = $W - $pad - $qrSize;
-        $qy = $H - $pad - $qrSize - ($landscape ? 0 : 10);
-        imagefilledrectangle($im, $qx - 10, $qy - 10, $qx + $qrSize + 10, $qy + $qrSize + 10, $this->color($im, '#f1f5f9'));
-        imagecopyresampled($im, $qr, $qx, $qy, 0, 0, $qrSize, $qrSize, imagesx($qr), imagesy($qr));
-        imagettftext($im, 18, 0, $qx, $qy - 22, $this->color($im, '#64748b'), $this->font('PlusJakartaSans-Medium'), 'Scan to view');
 
         ob_start();
         imagepng($im, null, 6);
 
         return (string) ob_get_clean();
+    }
+
+    /** White rounded tile with a soft edge + sleek QR inside. */
+    private function qrTile(\GdImage $im, string $url, int $x, int $y, int $size): void
+    {
+        $r = (int) round($size * 0.14);
+        $this->roundRect($im, $x - 2, $y + 4, $x + $size + 2, $y + $size + 8, $r, $this->color($im, '#0f172a', 112)); // shadow
+        $this->roundRect($im, $x, $y, $x + $size, $y + $size, $r, $this->color($im, '#ffffff'));
+        $inner = $size - (int) round($size * 0.06) * 2;
+        $qr = $this->qr->image($url, $inner);
+        $o = (int) (($size - $inner) / 2);
+        imagecopy($im, $qr, $x + $o, $y + $o, 0, 0, $inner, $inner);
+        imagedestroy($qr);
+    }
+
+    /** Small white "neaby." pill (Comfortaa wordmark) on the photo. */
+    private function brandPill(\GdImage $im, int $x, int $y, int $size): void
+    {
+        $font = $this->font('Comfortaa-Bold');
+        $b = imagettfbbox($size, 0, $font, 'neaby');
+        $tw = $b[2] - $b[0];
+        $dot = (int) round($size * 0.3);
+        $h = (int) round($size * 1.9);
+        $w = $tw + $dot + (int) round($size * 1.5);
+        $this->roundRect($im, $x, $y, $x + $w, $y + $h, (int) ($h / 2), $this->color($im, '#ffffff', 12));
+        $tx = $x + (int) round($size * 0.62);
+        $ty = $y + (int) (($h + $size) / 2) - 2;
+        imagettftext($im, $size, 0, $tx, $ty, $this->color($im, '#0f172a'), $font, 'neaby');
+        imagefilledellipse($im, $tx + $tw + (int) ($dot * 0.9), $ty - (int) ($dot / 2), $dot, $dot, $this->color($im, '#16b26a'));
+    }
+
+    private function pillWidth(string $text, int $size): int
+    {
+        $b = imagettfbbox($size, 0, $this->font('PlusJakartaSans-ExtraBold'), $text);
+
+        return ($b[2] - $b[0]) + 44;
+    }
+
+    private function fit(string $text, string $font, int $size, int $max): int
+    {
+        while ($size > 12) {
+            $b = imagettfbbox($size, 0, $font, $text);
+            if (($b[2] - $b[0]) <= $max) {
+                break;
+            }
+            $size--;
+        }
+
+        return $size;
+    }
+
+    private function roundRect(\GdImage $im, int $x1, int $y1, int $x2, int $y2, int $r, int $c): void
+    {
+        $r = max(0, min($r, (int) (($x2 - $x1) / 2), (int) (($y2 - $y1) / 2)));
+        imagefilledrectangle($im, $x1 + $r, $y1, $x2 - $r, $y2, $c);
+        imagefilledrectangle($im, $x1, $y1 + $r, $x1 + $r - 1, $y2 - $r, $c);
+        imagefilledrectangle($im, $x2 - $r + 1, $y1 + $r, $x2, $y2 - $r, $c);
+        $d = 2 * $r;
+        imagefilledarc($im, $x1 + $r, $y1 + $r, $d, $d, 180, 270, $c, IMG_ARC_PIE);
+        imagefilledarc($im, $x2 - $r, $y1 + $r, $d, $d, 270, 360, $c, IMG_ARC_PIE);
+        imagefilledarc($im, $x1 + $r, $y2 - $r, $d, $d, 90, 180, $c, IMG_ARC_PIE);
+        imagefilledarc($im, $x2 - $r, $y2 - $r, $d, $d, 0, 90, $c, IMG_ARC_PIE);
     }
 
     private function drawCover(\GdImage $im, ?string $path, int $x, int $y, int $w, int $h, string $accent, string $title): void

@@ -7,7 +7,9 @@
  */
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { ArrowLeft, ChevronsLeft, ChevronsRight, LogIn, LogOut, Plus, Search, Settings, ShoppingBag, Store } from 'lucide-vue-next';
+import { ArrowLeft, ChevronsLeft, ChevronsRight, LogIn, LogOut, MessageCircle, Plus, Search, Settings, Store } from 'lucide-vue-next';
+import CartIcon from '@/Components/icons/CartIcon.vue';
+import CallOverlay from '@/Components/CallOverlay.vue';
 import Wordmark from '@/Components/Wordmark.vue';
 import Monogram from '@/Components/Monogram.vue';
 import Avatar from '@/Components/Avatar.vue';
@@ -73,12 +75,21 @@ function submitSearch() {
             class="fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-ink-200/70 bg-white/80 backdrop-blur-xl transition-[width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] lg:flex"
             :class="collapsed ? 'w-[var(--nav-rail)]' : 'w-[var(--nav-sidebar)]'"
         >
-            <div class="flex h-16 shrink-0 items-center px-4" :class="collapsed ? 'justify-center' : 'justify-between'">
+            <div class="flex shrink-0 items-center px-4" :class="collapsed ? 'h-auto flex-col gap-2 pb-2 pt-3' : 'h-16 justify-between'">
                 <Link :href="route('home')" aria-label="neaby home" class="flex items-center">
-                    <Monogram v-if="collapsed" :size="40" />
+                    <Monogram v-if="collapsed" :size="38" />
                     <Wordmark v-else size="md" class="pl-1" />
                 </Link>
-                <button v-if="!collapsed" class="icon-btn h-8 w-8" aria-label="Collapse sidebar" @click="toggle"><ChevronsLeft :size="18" /></button>
+                <button v-if="!collapsed" class="icon-btn h-8 w-8" aria-label="Collapse sidebar" title="Collapse sidebar" @click="toggle"><ChevronsLeft :size="18" /></button>
+                <button
+                    v-else
+                    class="group relative flex h-8 w-11 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-600 shadow-sm transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+                    aria-label="Expand sidebar"
+                    @click="toggle"
+                >
+                    <ChevronsRight :size="18" :stroke-width="2.4" />
+                    <span class="pointer-events-none absolute left-[calc(100%+12px)] whitespace-nowrap rounded-lg bg-ink-900 px-2.5 py-1 text-xs font-semibold text-white opacity-0 shadow-lift transition group-hover:opacity-100">Expand</span>
+                </button>
             </div>
 
             <div class="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4 no-scrollbar">
@@ -112,7 +123,7 @@ function submitSearch() {
                 <div v-if="!collapsed && categories.length" class="mt-6">
                     <div class="mb-2 px-3 text-[11px] font-bold uppercase tracking-[.12em] text-ink-400">Browse</div>
                     <Link
-                        v-for="c in categories.slice(0, 10)"
+                        v-for="c in categories.filter((x) => x && x.slug).slice(0, 10)"
                         :key="c.id"
                         :href="route('categories.show', c.slug)"
                         class="flex h-9 items-center gap-3 rounded-xl px-3 text-sm text-ink-600 transition hover:bg-ink-100 hover:text-ink-900"
@@ -147,7 +158,6 @@ function submitSearch() {
                     </div>
                     <Link v-else :href="route('login')" class="icon-btn mx-auto flex" aria-label="Sign in"><LogIn :size="18" /></Link>
                 </template>
-                <button v-if="collapsed" class="icon-btn mx-auto mt-2 flex h-8 w-8" aria-label="Expand sidebar" @click="toggle"><ChevronsRight :size="18" /></button>
             </div>
         </aside>
 
@@ -166,7 +176,8 @@ function submitSearch() {
                     <h1 v-else class="truncate font-display text-[17px] font-bold">{{ title }}</h1>
                     <div class="ml-auto flex items-center gap-1">
                         <slot name="mobile-actions" />
-                        <Link v-if="user && counts.cart" :href="route('cart.index')" class="icon-btn relative" aria-label="Cart"><ShoppingBag :size="20" /><span class="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-brand-600 px-1 text-center text-[9.5px] font-bold leading-4 text-white">{{ counts.cart }}</span></Link>
+                        <Link v-if="user" :href="route('messages.index')" class="icon-btn relative" aria-label="Messages"><MessageCircle :size="20" /><span v-if="counts.messages" class="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-red-500 px-1 text-center text-[9.5px] font-bold leading-4 text-white">{{ counts.messages > 9 ? '9+' : counts.messages }}</span></Link>
+                        <Link v-if="user && counts.cart" :href="route('cart.index')" class="icon-btn relative" aria-label="Cart"><CartIcon :size="20" /><span class="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-brand-600 px-1 text-center text-[9.5px] font-bold leading-4 text-white">{{ counts.cart }}</span></Link>
                         <Link v-if="!route().current('search')" :href="route('search')" class="icon-btn" aria-label="Search"><Search :size="20" /></Link>
                         <Link v-if="user" :href="route('profile.show')" aria-label="Profile"><Avatar :src="user.avatar" :initials="user.initials" :size="32" /></Link>
                         <Link v-else :href="route('login')" class="btn-sm btn-dark">Sign in</Link>
@@ -178,7 +189,7 @@ function submitSearch() {
             <header v-if="title || $slots.actions" class="sticky top-0 z-30 hidden border-b border-ink-200/50 bg-ink-50/80 backdrop-blur-xl md:block">
                 <div class="mx-auto flex h-16 items-center gap-3 px-6 lg:px-8" :class="wide ? 'max-w-[1600px]' : 'max-w-7xl'">
                     <Link v-if="back" :href="back" class="icon-btn -ml-2" aria-label="Back"><ArrowLeft :size="20" /></Link>
-                    <h1 class="truncate font-display text-xl font-bold text-ink-900">{{ title }}</h1>
+                    <h1 class="truncate font-display text-lg font-bold text-ink-900">{{ title }}</h1>
                     <div class="ml-auto flex items-center gap-2"><slot name="actions" /></div>
                 </div>
             </header>
@@ -220,5 +231,6 @@ function submitSearch() {
         </nav>
 
         <Flash />
+        <CallOverlay v-if="user" />
     </div>
 </template>

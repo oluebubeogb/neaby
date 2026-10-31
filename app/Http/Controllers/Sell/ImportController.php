@@ -21,7 +21,7 @@ class ImportController extends Controller
 
         return Inertia::render('Sell/Import/Index', [
             'batches' => ImportBatch::query()->where('store_id', $store->id)->latest()->limit(20)->get()->map(fn ($b) => $this->batch($b)),
-            'categories' => Category::query()->active()->get(['name', 'slug']),
+            'categoryOptions' => Category::query()->active()->get(['name', 'slug']),
             'maxRows' => ProductImporter::MAX_ROWS,
             'seo' => $seo,
         ])->withViewData(['seo' => $seo]);

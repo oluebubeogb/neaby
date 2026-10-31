@@ -32,7 +32,7 @@ defineProps({ stats: Object, recent: Array, reviewRequired: Boolean, seo: Object
                 { k: 'rejected', l: 'Rejected', i: CircleAlert, c: '#e11d48' },
             ]" :key="s.k" class="surface p-4">
                 <IconCircle :color="s.c" :size="40"><component :is="s.i" :size="18" /></IconCircle>
-                <div class="mt-3 font-display text-2xl font-extrabold">{{ stats[s.k] }}</div>
+                <div class="mt-3 font-display text-xl font-extrabold">{{ stats[s.k] }}</div>
                 <div class="text-sm text-ink-500">{{ s.l }}</div>
             </div>
         </div>

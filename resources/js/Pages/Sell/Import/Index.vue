@@ -5,7 +5,7 @@ import AppShell from '@/Layouts/AppShell.vue';
 import SeoHead from '@/Components/SeoHead.vue';
 import IconCircle from '@/Components/IconCircle.vue';
 
-defineProps({ batches: Array, categories: Array, maxRows: Number, seo: Object });
+defineProps({ batches: Array, categoryOptions: Array, maxRows: Number, seo: Object });
 const form = useForm({ file: null });
 const submit = () => form.post(route('sell.import.store'), { forceFormData: true });
 const tone = { completed: 'bg-brand-100 text-brand-800', processing: 'bg-sky-100 text-sky-800', queued: 'bg-amber-100 text-amber-800', failed: 'bg-red-100 text-red-700' };
@@ -19,7 +19,7 @@ const tone = { completed: 'bg-brand-100 text-brand-800', processing: 'bg-sky-100
                 <div class="flex items-start gap-3">
                     <IconCircle color="#16b26a" :size="44"><FileSpreadsheet :size="20" /></IconCircle>
                     <div class="text-sm text-ink-600">
-                        <h2 class="font-display text-lg font-bold text-ink-900">Upload a CSV or Excel file</h2>
+                        <h2 class="font-display text-base font-bold text-ink-900">Upload a CSV or Excel file</h2>
                         <p>Up to {{ maxRows }} rows. Imported products are saved as <b>drafts</b> — add photos, then publish. Include an <code>id</code> column to update existing listings.</p>
                     </div>
                 </div>
@@ -31,7 +31,7 @@ const tone = { completed: 'bg-brand-100 text-brand-800', processing: 'bg-sky-100
                 </div>
                 <details class="mt-4 text-sm text-ink-600">
                     <summary class="cursor-pointer font-semibold">Category slugs</summary>
-                    <div class="mt-2 flex flex-wrap gap-1"><code v-for="c in categories" :key="c.slug" class="rounded bg-ink-100 px-1.5 py-0.5 text-xs">{{ c.slug }}</code></div>
+                    <div class="mt-2 flex flex-wrap gap-1"><code v-for="c in categoryOptions" :key="c.slug" class="rounded bg-ink-100 px-1.5 py-0.5 text-xs">{{ c.slug }}</code></div>
                 </details>
             </form>
             <section v-if="batches.length" class="surface divide-y divide-ink-100 overflow-hidden">

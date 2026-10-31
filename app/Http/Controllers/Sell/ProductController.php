@@ -92,6 +92,7 @@ class ProductController extends Controller
                 'pickup_available' => (bool) $product->pickup_available,
                 'delivery_fee' => $product->delivery_fee_minor ? $product->delivery_fee_minor / 100 : null,
                 'reserved_quantity' => (int) $product->reserved_quantity,
+                'options_text' => self::optionsText($product->options),
                 'moderation_note' => $product->moderation_note,
                 'images' => $product->images->map(fn (ProductImage $i) => ['id' => $i->id, 'url' => $i->url()]),
                 'url' => route('products.show', $product),
@@ -174,6 +175,8 @@ class ProductController extends Controller
             'checkout_enabled' => ['nullable', 'boolean'],
             'pickup_available' => ['nullable', 'boolean'],
             'delivery_fee' => ['nullable', 'numeric', 'min:0', 'max:10000000'],
+            // "Size: S, M, L" — one option per line, buyers must pick a value.
+            'options_text' => ['nullable', 'string', 'max:1000'],
         ], [
             'category_id.required' => 'Pick a category so buyers can find it.',
             'description.min' => 'Tell buyers a little more (at least 10 characters).',
@@ -228,6 +231,9 @@ class ProductController extends Controller
         }
         if (array_key_exists('delivery_fee', $data)) {
             $product->delivery_fee_minor = (int) round(((float) ($data['delivery_fee'] ?? 0)) * 100);
+        }
+        if (array_key_exists('options_text', $data)) {
+            $product->options = self::parseOptions($data['options_text']);
         }
         if ($product->isDirty('quantity')) {
             $product->stock_updated_at = now();
@@ -297,5 +303,32 @@ class ProductController extends Controller
             'max_images' => (int) config('neaby.uploads.max_images'),
             'max_image_kb' => (int) config('neaby.uploads.max_image_kb'),
         ];
+    }
+
+    /** "Size: S, M, L\nColour: Red, Blue" → [{name, values}] (max 3 options × 20 values). */
+    public static function parseOptions(?string $text): ?array
+    {
+        $out = [];
+        foreach (preg_split('/\r?\n/', (string) $text) as $line) {
+            if (! str_contains($line, ':')) {
+                continue;
+            }
+            [$name, $vals] = array_map('trim', explode(':', $line, 2));
+            $values = array_values(array_unique(array_filter(array_map(fn ($v) => Str::limit(trim($v), 30, ''), explode(',', $vals)), fn ($v) => $v !== '')));
+            if ($name === '' || ! $values) {
+                continue;
+            }
+            $out[] = ['name' => Str::limit(Str::title($name), 30, ''), 'values' => array_slice($values, 0, 20)];
+            if (count($out) === 3) {
+                break;
+            }
+        }
+
+        return $out ?: null;
+    }
+
+    public static function optionsText(?array $options): string
+    {
+        return collect($options ?? [])->map(fn ($o) => $o['name'].': '.implode(', ', $o['values']))->implode("\n");
     }
 }

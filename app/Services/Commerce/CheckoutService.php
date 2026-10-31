@@ -8,6 +8,7 @@ use App\Models\InventoryReservation;
 use App\Models\Order;
 use App\Models\PaymentTransaction;
 use App\Models\Product;
+use App\Models\QrCode;
 use App\Models\ProductEvent;
 use App\Models\Refund;
 use App\Models\User;
@@ -39,12 +40,24 @@ class CheckoutService
     public function lines(User $user): Collection
     {
         return $this->cartFor($user)->items()
-            ->with(['product' => fn ($q) => $q->with(['cover', 'store'])])
+            ->with(['product' => fn ($q) => $q->with(['cover', 'store']), 'qrCode'])
             ->orderBy('id')->get()
             ->filter(fn ($i) => $i->product !== null)->values();
     }
 
-    public function add(User $user, Product $product, int $qty): void
+    /** Most a buyer may hold of a product: remaining stock (optionally capped by config). */
+    public static function maxQty(Product $product): int
+    {
+        $cap = (int) config('neaby.checkout.max_qty_per_item', 0);
+
+        return max(0, $cap > 0 ? min($cap, $product->available()) : $product->available());
+    }
+
+    /**
+     * @param  array<string,string>|null  $options  e.g. ['Size' => 'M'] — validated against the product's options
+     * @param  bool  $replace  set the quantity instead of adding to it (QR scans)
+     */
+    public function add(User $user, Product $product, int $qty, ?array $options = null, ?QrCode $qr = null, bool $replace = false): void
     {
         $product->loadMissing('store');
         if (! $product->isPublic() || ! $product->checkout_enabled) {
@@ -53,14 +66,42 @@ class CheckoutService
         if ($product->user_id === $user->id) {
             throw ValidationException::withMessages(['product' => 'You can’t buy your own listing.']);
         }
+        $options = $this->cleanOptions($product, $options);
         $cart = $this->cartFor($user);
         $item = $cart->items()->firstOrNew(['product_id' => $product->id]);
-        $max = min(config('neaby.checkout.max_qty_per_item', 20), $product->available());
+        $max = self::maxQty($product);
         if ($max < 1) {
             throw ValidationException::withMessages(['product' => 'This item is out of stock.']);
         }
-        $item->quantity = max(1, min($max, ($item->exists ? $item->quantity : 0) + $qty));
+        $base = ($item->exists && ! $replace) ? $item->quantity : 0;
+        $item->quantity = max(1, min($max, $base + $qty));
+        if ($options !== null) {
+            $item->options = $options ?: null;
+        }
+        if ($qr && $qr->isRedeemable() && $qr->product_id === $product->id) {
+            $item->qr_code_id = $qr->id;
+        }
         $item->save();
+    }
+
+    /** Keep only option names/values the product actually offers; all named options are required. */
+    public function cleanOptions(Product $product, ?array $chosen): ?array
+    {
+        $defs = collect($product->options ?? [])->filter(fn ($o) => ! empty($o['name']) && ! empty($o['values']));
+        if ($defs->isEmpty()) {
+            return null;
+        }
+        $chosen = $chosen ?? [];
+        $out = [];
+        foreach ($defs as $def) {
+            $v = $chosen[$def['name']] ?? null;
+            if ($v === null || ! in_array($v, $def['values'], true)) {
+                throw ValidationException::withMessages(['options' => "Pick a {$def['name']}."]);
+            }
+            $out[$def['name']] = $v;
+        }
+
+        return $out;
     }
 
     /**
@@ -89,7 +130,7 @@ class CheckoutService
                         throw ValidationException::withMessages(['delivery_method' => "“{$l->product->title}” isn’t available for pickup."]);
                     }
                 }
-                $subtotal = $storeLines->sum(fn ($l) => $l->product->price_minor * $l->quantity);
+                $subtotal = $storeLines->sum(fn ($l) => $l->unitPriceMinor() * $l->quantity);
                 $delivery = $method === 'delivery' ? (int) $storeLines->max(fn ($l) => $l->product->delivery_fee_minor) : 0;
 
                 $order = Order::create([
@@ -118,9 +159,12 @@ class CheckoutService
                         'product_id' => $l->product->id,
                         'title' => $l->product->title,
                         'image_path' => $l->product->cover?->path,
-                        'unit_price_minor' => $l->product->price_minor,
+                        'unit_price_minor' => $l->unitPriceMinor(),
                         'quantity' => $l->quantity,
-                        'line_total_minor' => $l->product->price_minor * $l->quantity,
+                        'line_total_minor' => $l->unitPriceMinor() * $l->quantity,
+                        'options' => $l->options,
+                        'qr_code_id' => $l->unitPriceMinor() < $l->product->price_minor ? $l->qr_code_id : null,
+                        'discount_minor' => ($l->product->price_minor - $l->unitPriceMinor()) * $l->quantity,
                     ]);
                     if (! $this->inventory->reserve($l->product, $l->quantity, $order, now()->addMinutes($minutes))) {
                         // Rolls back every hold + order created in this transaction.
@@ -182,6 +226,8 @@ class CheckoutService
             }
 
             $order->forceFill(['status' => 'paid', 'payment_status' => 'paid', 'paid_at' => now()])->save();
+            // Count QR discount redemptions once the order is actually paid.
+            $order->items->pluck('qr_code_id')->filter()->unique()->each(fn ($id) => QrCode::query()->whereKey($id)->increment('uses'));
             foreach ($order->items as $item) {
                 ProductEvent::create(['type' => 'purchase', 'product_id' => $item->product_id, 'store_id' => $order->store_id, 'user_id' => $order->buyer_id, 'meta' => ['qty' => $item->quantity]]);
             }

@@ -1,7 +1,16 @@
 <script setup>
 import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { BadgeCheck, Eye, ImageOff, Instagram, MapPin, MessageCircle, Package, Pencil, Repeat2, Share2, ShoppingBag, Sparkles, Store, Truck, Zap } from 'lucide-vue-next';
+import { BadgeCheck, Eye, ImageOff, Info, Maximize2, MapPin, Package, Pencil, Repeat2, Share2, ShieldCheck, Sparkles, Store, Truck, Zap } from 'lucide-vue-next';
+import Tip from '@/Components/Tip.vue';
+import ReachOut from '@/Components/ReachOut.vue';
+import QtyStepper from '@/Components/QtyStepper.vue';
+import OptionPicker from '@/Components/OptionPicker.vue';
+import ImmersiveViewer from '@/Components/ImmersiveViewer.vue';
+import CartIcon from '@/Components/icons/CartIcon.vue';
+import WhatsAppLine from '@/Components/icons/WhatsAppLine.vue';
+import { requireLogin } from '@/composables/auth';
+import { waLink as wa } from '@/composables/wa';
 import ShareSheet from '@/Components/ShareSheet.vue';
 import SaveButton from '@/Components/SaveButton.vue';
 import AppShell from '@/Layouts/AppShell.vue';
@@ -15,11 +24,25 @@ const page = usePage();
 const signedIn = computed(() => !!page.props.auth?.user);
 const qty = ref(1);
 const busy = ref(false);
+const maxQty = computed(() => Math.max(1, Number(props.product.available) || 1));
+const productOptions = computed(() => props.product.options || []);
+const chosen = ref({});
+const optionError = ref(null);
+const cartError = computed(() => page.props.errors?.quantity || page.props.errors?.options || null);
 function addToCart(buyNow = false) {
-    if (!signedIn.value) return router.visit(route('login'));
+    if (!signedIn.value) return requireLogin();
+    const missing = productOptions.value.find((o) => !chosen.value[o.name]);
+    if (missing) { optionError.value = `Choose a ${missing.name.toLowerCase()} first.`; return; }
+    optionError.value = null;
     busy.value = true;
-    router.post(route('cart.add', props.product.id), { quantity: qty.value, buy_now: buyNow ? 1 : 0 }, { preserveScroll: true, onFinish: () => (busy.value = false) });
+    router.post(route('cart.add', props.product.id), { quantity: Math.min(qty.value, maxQty.value), buy_now: buyNow ? 1 : 0, options: productOptions.value.length ? chosen.value : null }, { preserveScroll: true, onFinish: () => (busy.value = false) });
 }
+const immersive = ref(false);
+const immersiveItems = computed(() => [
+    { id: props.product.id, slug: props.product.slug, title: props.product.title, price: props.product.price, compare_at: props.product.compare_at, image: images.value[0]?.url || null, city: props.product.city, store: store.value },
+    ...(props.moreFromStore || []),
+    ...(props.similar || []),
+].filter((p, i, a) => a.findIndex((x) => x.slug === p.slug) === i));
 const reqForm = useForm({ request_type: 'availability', requested_quantity: 1, fulfilment_method: '', message: '' });
 const fulfilmentLabels = { reseller_collects: 'I collect / pay you directly', supplier_dispatches: 'You dispatch to my buyer' };
 function sendRequest() {
@@ -41,16 +64,9 @@ function goTo(i) {
     strip.value?.scrollTo({ left: i * strip.value.clientWidth, behavior: 'smooth' });
 }
 
-const waLink = computed(() => {
-    if (!store.value?.whatsapp) return null;
-    let n = store.value.whatsapp.replace(/[^0-9]/g, '');
-    if (n.startsWith('0')) n = '234' + n.slice(1);
-    const text = `Hi ${store.value.name}! I'm interested in “${props.product.title}” (${props.product.price}) on neaby: ${props.product.url}`;
-    return `https://wa.me/${n}?text=${encodeURIComponent(text)}`;
-});
+const waLink = computed(() => wa(store.value?.whatsapp, `Hi ${store.value?.name}! I'm interested in “${props.product.title}” (${props.product.price}) on neaby: ${props.product.url}`));
 
 const sharing = ref(false);
-const copied = ref(false);
 function share() { sharing.value = true; }
 
 const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 text-amber-800', rejected: 'bg-red-100 text-red-700', paused: 'bg-ink-100 text-ink-700', archived: 'bg-ink-100 text-ink-500', published: 'bg-brand-100 text-brand-800' };
@@ -86,6 +102,9 @@ const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 te
                         />
                     </div>
                     <div v-else class="flex aspect-square items-center justify-center text-ink-300"><ImageOff :size="40" /></div>
+                    <Tip label="Immersive view" side="left" class="!absolute right-3 top-3 z-10">
+                        <button class="flex h-10 w-10 items-center justify-center rounded-full bg-ink-950/45 text-white ring-1 ring-white/20 backdrop-blur-md transition hover:bg-ink-950/60" aria-label="Open immersive view" @click="immersive = true"><Maximize2 :size="17" /></button>
+                    </Tip>
                     <div v-if="images.length > 1" class="absolute inset-x-0 bottom-3 flex justify-center gap-1.5">
                         <button v-for="(img, i) in images" :key="img.id" class="h-1.5 rounded-full bg-white/90 shadow transition-all" :class="i === active ? 'w-5' : 'w-1.5 opacity-60'" :aria-label="`Photo ${i + 1}`" @click="goTo(i)" />
                     </div>
@@ -106,10 +125,10 @@ const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 te
                     <span v-else class="badge bg-red-100 text-red-700">Sold out</span>
                 </div>
 
-                <h1 class="mt-3 font-display text-2xl font-extrabold leading-tight tracking-tight text-ink-900 md:text-[2rem]">{{ product.title }}</h1>
+                <h1 class="mt-3 font-display text-xl font-extrabold leading-snug tracking-tight text-ink-900 md:text-[1.4rem]">{{ product.title }}</h1>
                 <div class="mt-3 flex items-baseline gap-2">
-                    <span class="font-display text-3xl font-extrabold text-ink-900">{{ product.price }}</span>
-                    <span v-if="product.compare_at" class="text-lg text-ink-400 line-through">{{ product.compare_at }}</span>
+                    <span class="font-display text-xl font-extrabold text-ink-900 md:text-2xl">{{ product.price }}</span>
+                    <span v-if="product.compare_at" class="text-sm text-ink-400 line-through">{{ product.compare_at }}</span>
                 </div>
                 <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-500">
                     <span v-if="product.city || product.state" class="inline-flex items-center gap-1"><MapPin :size="14" /> {{ [product.city, product.state].filter(Boolean).join(', ') }}</span>
@@ -118,28 +137,45 @@ const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 te
                 </div>
 
                 <!-- Actions -->
-                <div v-if="canBuy && product.in_stock" class="surface mt-6 p-4">
-                    <div class="flex flex-wrap items-center gap-3 text-sm text-ink-600">
+                <div v-if="canBuy && product.in_stock" class="surface mt-5 p-4">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-600">
                         <span v-if="product.delivery_fee" class="inline-flex items-center gap-1.5"><Truck :size="15" /> Delivery {{ product.delivery_fee }}</span>
-                        <span v-else class="inline-flex items-center gap-1.5"><Truck :size="15" /> Delivery fee set by seller at checkout</span>
+                        <span v-else class="inline-flex items-center gap-1.5"><Truck :size="15" /> Delivery fee set at checkout</span>
                         <span v-if="product.pickup_available" class="inline-flex items-center gap-1.5"><Store :size="15" /> Pickup available</span>
+                        <Tip label="Pay securely on neaby. Stock is held for you while you pay." wide class="ml-auto">
+                            <span tabindex="0" class="inline-flex cursor-help items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-700"><ShieldCheck :size="13" /> Secure <Info :size="12" class="opacity-70" /></span>
+                        </Tip>
                     </div>
-                    <div class="mt-3 flex items-center gap-2">
-                        <label class="sr-only" for="qty">Quantity</label>
-                        <select id="qty" v-model.number="qty" class="input w-24">
-                            <option v-for="n in Math.min(product.available || 1, 20)" :key="n" :value="n">{{ n }}</option>
-                        </select>
-                        <button class="btn-dark btn-lg flex-1" :disabled="busy" @click="addToCart(true)"><Zap :size="18" /> Buy now</button>
-                        <button class="btn-ghost btn-lg" :disabled="busy" aria-label="Add to cart" @click="addToCart(false)"><ShoppingBag :size="18" /><span class="hidden sm:inline">Add to cart</span></button>
+                    <OptionPicker v-if="productOptions.length" v-model="chosen" :options="productOptions" :error="optionError" class="mt-4" />
+                    <div class="mt-4 flex items-center gap-2">
+                        <QtyStepper v-model="qty" :max="maxQty" :disabled="busy" />
+                        <span class="text-xs text-ink-400">{{ maxQty }} in stock</span>
+                        <div class="ml-auto flex items-center gap-2">
+                            <Tip label="Add to cart">
+                                <button class="icon-btn-lg" :disabled="busy" aria-label="Add to cart" @click="addToCart(false)"><CartIcon :size="20" /></button>
+                            </Tip>
+                            <Tip label="Buy now">
+                                <button class="icon-btn-dark w-14" :disabled="busy" aria-label="Buy now" @click="addToCart(true)"><Zap :size="19" /></button>
+                            </Tip>
+                        </div>
                     </div>
-                    <p class="hint mt-2">Pay securely on neaby. Stock is held for you while you pay.</p>
+                    <p v-if="cartError" class="mt-2 text-xs font-medium text-red-600">{{ cartError }}</p>
                 </div>
-                <div class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-                    <Link v-if="isOwner" :href="route('sell.products.edit', product.id)" class="btn-dark btn-lg"><Pencil :size="18" /> Edit listing</Link>
-                    <a v-else-if="waLink" :href="waLink" target="_blank" rel="noopener" class="btn-lg" :class="canBuy ? 'btn-soft' : 'btn-primary'"><MessageCircle :size="18" /> Chat seller on WhatsApp</a>
-                    <Link v-else-if="store" :href="route('stores.show', store.slug)" class="btn-primary btn-lg"><Store :size="18" /> Visit store</Link>
-                    <SaveButton v-if="!isOwner" :product-id="product.id" :saved="isSaved" label />
-                    <button class="btn-ghost btn-lg" @click="share"><Share2 :size="18" /> Share</button>
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                    <Link v-if="isOwner" :href="route('sell.products.edit', product.id)" class="btn-dark btn-lg flex-1"><Pencil :size="18" /> Edit listing</Link>
+                    <template v-else>
+                        <ReachOut :product="product.id" :name="store?.name || 'seller'" :draft="`Hi! Is “${product.title}” still available?`" align="left" />
+                        <Tip v-if="waLink" label="WhatsApp seller">
+                            <a :href="waLink" target="_blank" rel="noopener" class="icon-btn-lg" aria-label="Chat seller on WhatsApp"><WhatsAppLine :size="20" /></a>
+                        </Tip>
+                        <Tip label="Save">
+                            <SaveButton :product-id="product.id" :saved="isSaved" btn-class="icon-btn-lg" />
+                        </Tip>
+                    </template>
+                    <Tip label="Share">
+                        <button class="icon-btn-lg" aria-label="Share" @click="share"><Share2 :size="19" /></button>
+                    </Tip>
+                    <Link v-if="!isOwner && !canBuy && store" :href="route('stores.show', store.slug)" class="btn-ghost btn-lg ml-auto"><Store :size="17" /> Visit store</Link>
                 </div>
                 <p v-if="!canBuy && !isOwner" class="mt-2 text-xs text-ink-400">This seller hasn't turned on neaby checkout — arrange payment and delivery directly with them.</p>
                 <div v-if="isOwner" class="mt-2 flex flex-wrap gap-3 text-xs text-ink-500">
@@ -189,7 +225,6 @@ const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 te
                     </div>
                     <span class="btn-soft btn-sm">View store</span>
                 </Link>
-                <a v-if="store?.instagram" :href="`https://instagram.com/${store.instagram.replace('@', '')}`" target="_blank" rel="noopener" class="mt-2 inline-flex items-center gap-1.5 text-sm text-ink-500 hover:text-ink-800"><Instagram :size="14" /> {{ store.instagram }}</a>
 
                 <!-- Description -->
                 <div class="mt-8">
@@ -219,6 +254,7 @@ const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 te
             <h2 class="section-title mb-4">You might also like</h2>
             <ProductGrid :products="similar" dense />
         </section>
+        <ImmersiveViewer :show="immersive" :items="immersiveItems" :start="0" title="Explore" @close="immersive = false" />
         <ShareSheet :show="sharing" kind="product" :id="product.id" :url="shareUrl || product.url" :title="product.title" :text="`${product.title} — ${product.price} on neaby`" :card-base="route('share.product', product.slug)" :qr-url="route('qr.product', product.slug)" @close="sharing = false" />
     </AppShell>
 </template>

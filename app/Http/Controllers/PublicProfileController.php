@@ -15,6 +15,9 @@ class PublicProfileController extends Controller
         abort_if($user->isSuspended(), 404);
 
         $store = $user->store()->active()->withCount(['products' => fn ($q) => $q->where('status', 'published')])->first();
+        $products = $store
+            ? $store->products()->where('status', 'published')->with(['cover', 'store'])->latest('published_at')->limit(12)->get()->map(fn ($p) => Present::productCard($p))->values()
+            : collect();
         $seo = Seo::make("{$user->name} (@{$user->username})", $user->bio);
 
         return Inertia::render('Users/Show', [
@@ -29,6 +32,9 @@ class PublicProfileController extends Controller
                 'joined' => $user->created_at?->format('M Y'),
             ],
             'store' => $store ? Present::storeCard($store) : null,
+            'products' => $products,
+            'isSelf' => request()->user()?->id === $user->id,
+            'url' => route('users.show', $user->username),
             'seo' => $seo,
         ])->withViewData(['seo' => $seo]);
     }

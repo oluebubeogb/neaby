@@ -74,7 +74,7 @@ const tone = { published: 'bg-brand-100 text-brand-800', pending: 'bg-amber-100 
 
         <Modal :show="!!target" max-width="lg" @close="target = null">
             <form v-if="target" class="p-6" @submit.prevent="submitReject">
-                <h2 class="font-display text-lg font-bold">{{ form.action === 'reject' ? 'Request changes' : 'Take down listing' }}</h2>
+                <h2 class="font-display text-base font-bold">{{ form.action === 'reject' ? 'Request changes' : 'Take down listing' }}</h2>
                 <p class="mt-1 line-clamp-1 text-sm text-ink-500">{{ target.title }}</p>
                 <div class="mt-4 flex flex-wrap gap-2">
                     <button v-for="r in presets" :key="r" type="button" class="chip text-xs" @click="form.reason = r">{{ r }}</button>

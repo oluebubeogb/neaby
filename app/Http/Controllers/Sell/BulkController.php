@@ -32,7 +32,7 @@ class BulkController extends Controller
                 'category_id' => $p->category_id, 'image' => $p->cover ? Present::imageUrl($p->cover->path) : null,
                 'checkout_enabled' => (bool) $p->checkout_enabled, 'has_photo' => (bool) $p->cover,
             ]),
-            'categories' => Category::query()->active()->get(['id', 'name']),
+            'categoryOptions' => Category::query()->active()->get(['id', 'name']),
             'q' => $request->string('q')->toString(),
             'seo' => $seo,
         ])->withViewData(['seo' => $seo]);

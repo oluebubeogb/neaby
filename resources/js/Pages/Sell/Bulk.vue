@@ -5,7 +5,7 @@ import { ImageOff, Save, Search } from 'lucide-vue-next';
 import AppShell from '@/Layouts/AppShell.vue';
 import SeoHead from '@/Components/SeoHead.vue';
 
-const props = defineProps({ products: Array, categories: Array, q: String, seo: Object });
+const props = defineProps({ products: Array, categoryOptions: Array, q: String, seo: Object });
 const rows = ref(props.products.map((p) => ({ ...p })));
 const original = Object.fromEntries(props.products.map((p) => [p.id, JSON.stringify(p)]));
 const dirty = computed(() => rows.value.filter((r) => JSON.stringify(r) !== original[r.id]));
@@ -37,7 +37,7 @@ const setAll = (k, v) => rows.value.forEach((r) => (r[k] = v));
                         <td class="p-2"><div class="flex items-center gap-2"><div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-ink-100"><img v-if="r.image" :src="r.image" alt="" class="h-full w-full object-cover" /><div v-else class="flex h-full items-center justify-center text-ink-300"><ImageOff :size="14" /></div></div><span class="line-clamp-2 max-w-[260px]">{{ r.title }}</span></div></td>
                         <td class="p-2"><input v-model.number="r.price" type="number" min="1" class="input w-28 py-1.5" /></td>
                         <td class="p-2"><input v-model.number="r.quantity" type="number" :min="r.reserved" class="input w-20 py-1.5" /><div v-if="r.reserved" class="text-[11px] text-ink-400">{{ r.reserved }} reserved</div></td>
-                        <td class="p-2"><select v-model="r.category_id" class="input w-40 py-1.5"><option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option></select></td>
+                        <td class="p-2"><select v-model="r.category_id" class="input w-40 py-1.5"><option v-for="c in categoryOptions" :key="c.id" :value="c.id">{{ c.name }}</option></select></td>
                         <td class="p-2"><select v-model="r.status" class="input w-32 py-1.5"><option value="draft">Draft</option><option value="published" :disabled="!r.has_photo">Publish</option><option value="paused">Paused</option><option value="archived">Archived</option><option v-if="!['draft','published','paused','archived'].includes(r.status)" :value="r.status">{{ r.status }}</option></select></td>
                         <td class="p-2"><input v-model="r.checkout_enabled" type="checkbox" class="h-5 w-5 rounded text-brand-600" /></td>
                     </tr>

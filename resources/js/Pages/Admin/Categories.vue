@@ -46,7 +46,7 @@ function save() {
 
         <Modal :show="editing !== null" max-width="md" @close="editing = null">
             <form class="space-y-4 p-6" @submit.prevent="save">
-                <h2 class="font-display text-lg font-bold">{{ editing?.id ? 'Edit category' : 'New category' }}</h2>
+                <h2 class="font-display text-base font-bold">{{ editing?.id ? 'Edit category' : 'New category' }}</h2>
                 <div>
                     <label class="label">Name</label>
                     <input v-model="form.name" class="input" required />

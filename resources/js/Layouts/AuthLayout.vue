@@ -21,7 +21,7 @@ defineProps({
             <div class="absolute -bottom-40 -left-24 h-[30rem] w-[30rem] animate-drift-alt rounded-full bg-teal-400/20 blur-3xl" />
             <Link :href="route('landing')" class="relative"><Wordmark tone="white" size="lg" /></Link>
             <div class="relative mt-auto max-w-md">
-                <h2 class="font-display text-4xl font-extrabold leading-[1.08] tracking-tight">Your store, your people, <span class="text-brand-300">nearby.</span></h2>
+                <h2 class="font-display text-3xl font-extrabold leading-[1.08] tracking-tight">Your store, your people, <span class="text-brand-300">nearby.</span></h2>
                 <p class="mt-4 text-white/70">Open a free storefront, list in minutes and share it everywhere your customers already are.</p>
                 <ul class="mt-10 space-y-4 text-sm text-white/85">
                     <li class="flex items-center gap-3"><IconCircle color="#38cc83" :size="38"><Store :size="18" /></IconCircle> A beautiful store link in 60 seconds</li>
@@ -37,7 +37,7 @@ defineProps({
             </div>
             <div class="m-auto w-full max-w-[26rem] py-8">
                 <div class="surface p-6 sm:p-8">
-                    <h1 class="font-display text-2xl font-extrabold text-ink-900 sm:text-[1.7rem]">{{ title }}</h1>
+                    <h1 class="font-display text-xl font-extrabold text-ink-900 sm:text-[1.375rem]">{{ title }}</h1>
                     <p v-if="subtitle" class="mt-1.5 text-sm text-ink-500">{{ subtitle }}</p>
                     <div class="mt-6"><slot /></div>
                 </div>

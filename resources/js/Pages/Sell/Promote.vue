@@ -18,7 +18,7 @@ const start = () => { busy.value = true; router.post(route('sell.promote.start',
         <div class="mx-auto grid max-w-3xl gap-5 md:grid-cols-[220px_1fr]">
             <ProductCard :product="{ ...product, sponsored: true, sp: null }" />
             <div class="surface p-5">
-                <h2 class="flex items-center gap-2 font-display text-lg font-bold"><Megaphone :size="18" /> Boost in For You</h2>
+                <h2 class="flex items-center gap-2 font-display text-base font-bold"><Megaphone :size="18" /> Boost in For You</h2>
                 <p class="mt-1 text-sm text-ink-500">Your listing appears more often in the feed, always marked <b>Sponsored</b>. Ranking otherwise stays fair — quality and relevance still matter.</p>
                 <div v-if="!enabled" class="mt-4 rounded-xl bg-ink-50 p-3 text-sm">Sponsored listings are not enabled on this site yet.</div>
                 <div v-else-if="!isPublic" class="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Publish this listing before promoting it.</div>

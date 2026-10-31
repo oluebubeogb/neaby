@@ -1,7 +1,9 @@
 <script setup>
 import { Link, router } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
-import { Search, SlidersHorizontal, X, PackageSearch } from 'lucide-vue-next';
+import { Search, SlidersHorizontal, X, PackageSearch, ScanLine } from 'lucide-vue-next';
+import QrScanner from '@/Components/QrScanner.vue';
+import Tip from '@/Components/Tip.vue';
 import AppShell from '@/Layouts/AppShell.vue';
 import SeoHead from '@/Components/SeoHead.vue';
 import AppIcon from '@/Components/AppIcon.vue';
@@ -15,6 +17,7 @@ const props = defineProps({ filters: Object, results: Object, stores: Array, sta
 
 const f = reactive({ ...props.filters });
 const showFilters = ref(false);
+const scanning = ref(false);
 const sorts = { relevance: 'Best match', newest: 'Newest', price_asc: 'Price: low to high', price_desc: 'Price: high to low' };
 const activeCount = computed(() => ['category', 'min', 'max', 'condition', 'state'].filter((k) => props.filters[k]).length + (props.filters.in_stock ? 1 : 0));
 
@@ -39,7 +42,10 @@ function clearAll() {
             <div class="flex gap-2">
                 <div class="relative flex-1">
                     <Search :size="19" class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-400" />
-                    <input v-model="f.q" type="search" autofocus placeholder="Search products, stores, categories" class="input rounded-full py-3 pl-11 pr-4 shadow-soft" enterkeyhint="search" />
+                    <input v-model="f.q" type="search" autofocus placeholder="Search products, stores, categories" class="input rounded-full py-3 pl-11 pr-12 shadow-soft" enterkeyhint="search" />
+                    <Tip label="Scan a QR code" side="bottom" class="!absolute right-1.5 top-1/2 -translate-y-1/2">
+                        <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-500 transition hover:bg-ink-100 hover:text-ink-900" aria-label="Scan a QR code" @click="scanning = true"><ScanLine :size="18" /></button>
+                    </Tip>
                 </div>
                 <button type="button" class="btn-ghost relative rounded-full px-4 lg:hidden" aria-label="Filters" @click="showFilters = !showFilters">
                     <SlidersHorizontal :size="18" />
@@ -60,7 +66,7 @@ function clearAll() {
             >
                 <div class="lg:sticky lg:top-24">
                     <div class="mb-4 flex items-center justify-between">
-                        <h2 class="font-display text-lg font-bold">Filters</h2>
+                        <h2 class="font-display text-base font-bold">Filters</h2>
                         <div class="flex items-center gap-1">
                             <button v-if="activeCount" type="button" class="text-sm font-semibold text-brand-700" @click="clearAll">Clear all</button>
                             <button type="button" class="icon-btn md:hidden" aria-label="Close" @click="showFilters = false"><X :size="18" /></button>
@@ -144,5 +150,6 @@ function clearAll() {
                 </template>
             </section>
         </div>
+        <QrScanner :show="scanning" @close="scanning = false" />
     </AppShell>
 </template>

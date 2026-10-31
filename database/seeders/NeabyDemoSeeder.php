@@ -6,13 +6,16 @@ use App\Contracts\ListingAi;
 use App\Contracts\ObjectStore;
 use App\Models\Cart;
 use App\Models\Category;
+use App\Models\Conversation;
 use App\Models\Entitlement;
 use App\Models\ImportBatch;
 use App\Models\MembershipPlan;
+use App\Models\Message;
 use App\Models\Order;
 use App\Models\PaymentTransaction;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Models\QrCode;
 use App\Models\ResellerListing;
 use App\Models\SponsoredPlacement;
 use App\Models\Store;
@@ -28,6 +31,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -324,6 +328,8 @@ class NeabyDemoSeeder extends Seeder
             $this->seedSponsored();
             $this->seedImport();
             $this->seedInbox();
+            $this->seedChats();
+            $this->seedQrCodes();
         });
 
         try {
@@ -804,6 +810,61 @@ class NeabyDemoSeeder extends Seeder
         }
         $this->notice(20, 'Price drop on something you saved', 'An item in your Saved list is now cheaper. Take a look before it sells out.', route('saved.index'), 'info', now()->subHours(5), false);
         $this->notice(1, 'Admin: 2 listings to review', 'Demo admin tip — open Admin → Products to try moderation.', route('admin.products.index'), 'info', now()->subHours(3), false);
+    }
+
+    /** A few 1:1 text threads so Messages isn't empty in the demo. No media, no calls. */
+    private function seedChats(): void
+    {
+        if (! class_exists(Conversation::class) || ! Schema::hasTable('messages')) {
+            return;
+        }
+        $sellers = array_keys($this->stores);
+        $buyers = array_values(array_diff(array_keys($this->users), $sellers));
+        $pairs = [
+            [$buyers[0] ?? 20, $sellers[0] ?? 2, ['Hi! Is this still available?', 'Yes it is 🙌 Want me to hold one for you?', 'Please do — can I pick up on Saturday?', 'Saturday works. I’m in from 10am.']],
+            [2, array_values(array_diff($sellers, [2]))[0] ?? 3, ['Hello, do you deliver to Yaba?', 'We do — ₦2,500 within 24h.', 'Perfect, ordering now.']],
+            [$buyers[1] ?? 19, 2, ['Love your store! Do you take custom orders?', 'Thank you! Yes — send me a photo of what you have in mind.']],
+        ];
+        foreach ($pairs as [$a, $b, $lines]) {
+            if ($a === $b || ! isset($this->users[$a], $this->users[$b])) {
+                continue;
+            }
+            $ua = $this->users[$a];
+            $ub = $this->users[$b];
+            $conv = Conversation::between($ua, $ub);
+            $product = $this->products[$b][0] ?? null;
+            $at = now()->subHours(random_int(3, 40));
+            foreach ($lines as $i => $body) {
+                $at = $at->copy()->addMinutes(random_int(2, 25));
+                Message::query()->create(['conversation_id' => $conv->id, 'sender_id' => $i % 2 ? $ub->id : $ua->id, 'type' => 'text', 'body' => $body, 'created_at' => $at, 'updated_at' => $at]);
+            }
+            $conv->forceFill([
+                'context_type' => $product ? 'product' : 'store',
+                'context_id' => $product?->id ?? $this->stores[$b]->id ?? null,
+                'last_message_at' => $at,
+                // The last sender has obviously seen the thread; the other side gets an unread badge.
+                $conv->readColumn((count($lines) - 1) % 2 ? $ub : $ua) => $at,
+            ])->save();
+        }
+    }
+
+    /** One live QR deal per demo store (10% off, 14 days) so /sell/qr and /q/… have something to show. */
+    private function seedQrCodes(): void
+    {
+        if (! Schema::hasTable('qr_codes')) {
+            return;
+        }
+        foreach (array_slice($this->stores, 0, 4, true) as $n => $store) {
+            $product = $this->products[$n][0] ?? null;
+            if (! $product) {
+                continue;
+            }
+            QrCode::query()->create([
+                'code' => QrCode::newCode(), 'store_id' => $store->id, 'product_id' => $product->id, 'user_id' => $this->users[$n]->id,
+                'label' => 'Demo pop-up deal', 'discount_type' => 'percent', 'discount_value' => 10, 'default_quantity' => 1,
+                'preset_options' => null, 'allow_adjust' => true, 'expires_at' => now()->addDays(14), 'max_uses' => 50, 'active' => true,
+            ]);
+        }
     }
 
     private function notice(int $n, string $title, string $body, ?string $url, string $kind, Carbon $at, bool $read): void

@@ -21,7 +21,7 @@ const steps = [
             <div class="absolute -bottom-24 -left-10 h-64 w-64 animate-drift-alt rounded-full bg-teal-400/25 blur-3xl" />
             <div class="relative">
                 <p class="text-sm font-semibold uppercase tracking-widest text-brand-300">Sell on neaby</p>
-                <h1 class="mt-3 font-display text-3xl font-extrabold tracking-tight md:text-4xl">Turn your WhatsApp catalogue into a real store.</h1>
+                <h1 class="mt-3 font-display text-xl font-extrabold tracking-tight md:text-2xl">Turn your WhatsApp catalogue into a real store.</h1>
                 <p class="mt-3 max-w-lg text-white/70">Free to start. No website to build. Buyers nearby find you through search and their For You feed.</p>
                 <Link :href="route('sell.store.create')" class="btn-primary btn-lg mt-8">Open my store <ArrowRight :size="18" /></Link>
             </div>

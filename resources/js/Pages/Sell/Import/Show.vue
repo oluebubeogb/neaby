@@ -16,9 +16,9 @@ onBeforeUnmount(() => clearInterval(t));
     <AppShell :title="batch.filename" :back="route('sell.import.index')">
         <div class="mx-auto max-w-4xl">
             <div class="surface mb-4 grid grid-cols-3 gap-3 p-4 text-center">
-                <div><div class="font-display text-2xl font-extrabold">{{ batch.total ?? '—' }}</div><div class="text-xs text-ink-500">Rows</div></div>
-                <div><div class="font-display text-2xl font-extrabold text-brand-700">{{ batch.imported ?? 0 }}</div><div class="text-xs text-ink-500">Imported</div></div>
-                <div><div class="font-display text-2xl font-extrabold text-red-600">{{ batch.failed ?? 0 }}</div><div class="text-xs text-ink-500">Failed</div></div>
+                <div><div class="font-display text-xl font-extrabold">{{ batch.total ?? '—' }}</div><div class="text-xs text-ink-500">Rows</div></div>
+                <div><div class="font-display text-xl font-extrabold text-brand-700">{{ batch.imported ?? 0 }}</div><div class="text-xs text-ink-500">Imported</div></div>
+                <div><div class="font-display text-xl font-extrabold text-red-600">{{ batch.failed ?? 0 }}</div><div class="text-xs text-ink-500">Failed</div></div>
             </div>
             <p v-if="['queued', 'processing'].includes(batch.status)" class="mb-3 text-sm text-ink-500">Importing… this page refreshes automatically.</p>
             <p v-if="batch.error" class="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{{ batch.error }}</p>

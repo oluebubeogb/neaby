@@ -30,7 +30,7 @@ const bdLabels = { listing_quality: 'Listing quality', profile: 'Store profile',
             <Link v-if="!pro" :href="route('membership.index')" class="ml-auto text-sm font-semibold text-brand-700 hover:underline">Seller Pro: 90 days + export →</Link>
         </div>
         <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <div v-for="t in tiles" :key="t.label" class="surface p-4"><div class="flex items-center gap-1.5 text-xs font-semibold text-ink-500"><component :is="t.icon" :size="14" /> {{ t.label }}</div><div class="mt-1 font-display text-2xl font-extrabold">{{ t.value }}</div></div>
+            <div v-for="t in tiles" :key="t.label" class="surface p-4"><div class="flex items-center gap-1.5 text-xs font-semibold text-ink-500"><component :is="t.icon" :size="14" /> {{ t.label }}</div><div class="mt-1 font-display text-xl font-extrabold">{{ t.value }}</div></div>
         </div>
         <div class="mt-4 grid gap-4 lg:grid-cols-[2fr_1fr]">
             <section class="surface p-5">
@@ -41,7 +41,7 @@ const bdLabels = { listing_quality: 'Listing quality', profile: 'Store profile',
             </section>
             <section class="surface p-5">
                 <h2 class="section-title mb-1">Store quality</h2>
-                <div class="font-display text-4xl font-extrabold text-brand-700">{{ quality?.score ?? '—' }}<span class="text-base text-ink-400">/100</span></div>
+                <div class="font-display text-3xl font-extrabold text-brand-700">{{ quality?.score ?? '—' }}<span class="text-base text-ink-400">/100</span></div>
                 <div v-for="(l, k) in bdLabels" :key="k" class="mt-2 text-sm"><div class="flex justify-between"><span>{{ l }}</span><span>{{ bd[k] ?? 0 }}</span></div><div class="mt-1 h-1.5 rounded-full bg-ink-100"><div class="h-full rounded-full bg-brand-500" :style="{ width: (bd[k] || 0) + '%' }" /></div></div>
                 <p class="hint mt-3">Add 3+ photos, longer descriptions, keep stock fresh and fulfil orders to rank higher in For You.</p>
             </section>

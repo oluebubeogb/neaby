@@ -21,7 +21,7 @@ class Product extends Model
     protected $fillable = [
         'category_id', 'title', 'description', 'price_minor', 'compare_at_minor',
         'condition', 'quantity', 'city', 'state', 'title_ai_generated',
-        'checkout_enabled', 'delivery_fee_minor', 'pickup_available',
+        'checkout_enabled', 'delivery_fee_minor', 'pickup_available', 'options',
     ];
 
     /**
@@ -35,6 +35,7 @@ class Product extends Model
     {
         return [
             'published_at' => 'datetime',
+            'options' => 'array',
             'title_ai_generated' => 'boolean',
             'price_minor' => 'integer',
             'compare_at_minor' => 'integer',

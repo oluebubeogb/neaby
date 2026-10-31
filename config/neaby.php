@@ -35,7 +35,8 @@ return [
     'checkout' => [
         'enabled' => (bool) env('NEABY_CHECKOUT_ENABLED', true),
         'reservation_minutes' => (int) env('NEABY_RESERVATION_MINUTES', 30),
-        'max_qty_per_item' => (int) env('NEABY_MAX_QTY_PER_ITEM', 20),
+        // 0 = no extra cap: buyers can take up to the remaining stock.
+        'max_qty_per_item' => (int) env('NEABY_MAX_QTY_PER_ITEM', 0),
     ],
 
     // Phase 3/6 — memberships + resale.
@@ -57,5 +58,35 @@ return [
     'seller_pro' => [
         // Optional paid seller tools (90-day analytics + CSV export). Off = hidden plan.
         'enabled' => (bool) env('NEABY_SELLER_PRO_ENABLED', true),
+    ],
+
+    // UX pass — 1:1 messaging. Images are compressed in the browser before upload
+    // (max edge 1280px, WebP/JPEG ~0.75); voice notes are Opus at ~24 kbps.
+    'messaging' => [
+        'enabled' => (bool) env('NEABY_MESSAGING_ENABLED', true),
+        'max_image_kb' => (int) env('NEABY_CHAT_MAX_IMAGE_KB', 1536),
+        'max_voice_kb' => (int) env('NEABY_CHAT_MAX_VOICE_KB', 1024),
+        'max_voice_seconds' => (int) env('NEABY_CHAT_MAX_VOICE_SECONDS', 120),
+        'max_per_minute' => (int) env('NEABY_CHAT_MAX_PER_MINUTE', 30),
+        // Polling (no websocket server needed). Seconds; the client backs off when the tab is hidden.
+        'poll_thread_seconds' => (int) env('NEABY_CHAT_POLL_SECONDS', 4),
+        'poll_pulse_seconds' => (int) env('NEABY_CHAT_PULSE_SECONDS', 10),
+    ],
+
+    // WebRTC 1:1 voice calls. STUN alone works on most home/mobile networks;
+    // add a TURN server (e.g. coturn) for strict NAT / corporate networks.
+    'rtc' => [
+        'calls_enabled' => (bool) env('NEABY_CALLS_ENABLED', true),
+        'stun_urls' => array_values(array_filter(array_map('trim', explode(',', (string) env('NEABY_STUN_URLS', 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302'))))),
+        'turn_url' => env('NEABY_TURN_URL'), // e.g. turn:turn.example.com:3478?transport=udp (comma-separate several)
+        'turn_username' => env('NEABY_TURN_USERNAME'),
+        'turn_credential' => env('NEABY_TURN_CREDENTIAL'),
+        'ring_seconds' => (int) env('NEABY_CALL_RING_SECONDS', 40),
+    ],
+
+    // UX pass — seller QR codes.
+    'qr' => [
+        'max_active_per_store' => (int) env('NEABY_QR_MAX_ACTIVE_PER_STORE', 100),
+        'max_discount_percent' => (int) env('NEABY_QR_MAX_DISCOUNT_PERCENT', 90),
     ],
 ];

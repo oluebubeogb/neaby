@@ -105,6 +105,34 @@ class ProductController extends Controller
         ])->withViewData(['seo' => $seo]);
     }
 
+    /**
+     * Lightweight JSON for the immersive viewer: lazy-loaded per slide so the
+     * feed itself stays small. No view counting here (only full page opens count).
+     */
+    public function peek(Request $request, Product $product)
+    {
+        abort_unless($product->isPublic(), 404);
+        $product->load(['images', 'store']);
+        $user = $request->user();
+
+        return response()->json([
+            'id' => $product->id,
+            'slug' => $product->slug,
+            'title' => $product->title,
+            'price' => Present::money($product->price_minor, $product->currency),
+            'excerpt' => Present::excerpt($product->description, 220),
+            'available' => $product->available(),
+            'images' => $product->images->map(fn ($i) => $i->url())->values(),
+            'store' => $product->store ? Present::storeCard($product->store) : null,
+            'city' => $product->city,
+            'url' => route('products.show', $product),
+            'is_saved' => $user ? SavedProduct::query()->where('user_id', $user->id)->where('product_id', $product->id)->exists() : false,
+            'can_buy' => $product->canCheckout() && $user?->id !== $product->user_id,
+            'has_options' => ! empty($product->options),
+            'is_owner' => $user?->id === $product->user_id,
+        ])->header('Cache-Control', 'private, max-age=60');
+    }
+
     private function attribute(Request $request, Engagement $engagement, Product $product): void
     {
         $ch = (string) $request->query('ch', '');

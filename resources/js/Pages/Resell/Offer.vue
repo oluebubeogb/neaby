@@ -34,8 +34,8 @@ function enquire() {
             </section>
             <section>
                 <div class="flex flex-wrap gap-2 text-xs"><span v-if="offer.category" class="badge bg-ink-100 text-ink-700">{{ offer.category }}</span><span class="badge bg-ink-100 capitalize text-ink-700">{{ offer.condition }}</span><span class="badge" :class="offer.in_stock ? 'bg-brand-100 text-brand-800' : 'bg-red-100 text-red-700'">{{ offer.in_stock ? 'In stock' : 'Sold out' }}</span></div>
-                <h1 class="mt-3 font-display text-2xl font-extrabold leading-tight md:text-[2rem]">{{ offer.title }}</h1>
-                <div class="mt-3 font-display text-3xl font-extrabold">{{ offer.price }}</div>
+                <h1 class="mt-3 font-display text-xl font-extrabold leading-tight md:text-[1.375rem]">{{ offer.title }}</h1>
+                <div class="mt-3 font-display text-2xl font-extrabold">{{ offer.price }}</div>
                 <div v-if="offer.city || offer.state" class="mt-2 inline-flex items-center gap-1 text-sm text-ink-500"><MapPin :size="14" /> {{ [offer.city, offer.state].filter(Boolean).join(', ') }}</div>
                 <div class="mt-6 grid gap-2 sm:grid-cols-[1fr_auto]">
                     <a v-if="wa && offer.live" :href="wa" target="_blank" rel="noopener" class="btn-primary btn-lg" @click="enquire"><MessageCircle :size="18" /> Chat on WhatsApp</a>

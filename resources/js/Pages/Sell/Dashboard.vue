@@ -45,7 +45,7 @@ const remove = (p) => confirm(`Delete “${p.title}”? This can't be undone.`) 
             <div class="relative flex flex-wrap items-center gap-4">
                 <Avatar :src="store.logo" :initials="store.initials" :accent="store.accent" :size="60" rounded="rounded-2xl" />
                 <div class="min-w-0 flex-1">
-                    <h1 class="font-display text-xl font-extrabold tracking-tight md:text-2xl">{{ store.name }}</h1>
+                    <h1 class="font-display text-lg font-extrabold tracking-tight md:text-xl">{{ store.name }}</h1>
                     <a :href="route('stores.show', store.slug)" class="inline-flex items-center gap-1 text-sm text-ink-500 hover:text-brand-700">{{ route('stores.show', store.slug).replace(/^https?:\/\//, '') }} <ExternalLink :size="13" /></a>
                 </div>
                 <div class="flex gap-2">
@@ -59,19 +59,20 @@ const remove = (p) => confirm(`Delete “${p.title}”? This can't be undone.`) 
                 <Link :href="route('sell.import.index')" class="chip">Import CSV/XLSX</Link>
                 <Link :href="route('sell.bulk.index')" class="chip">Bulk edit</Link>
                 <Link :href="route('sell.resale.index')" class="chip">Supplier resale</Link>
+                <Link :href="route('sell.qr.index')" class="chip">QR codes</Link>
             </div>
             <div class="relative mt-5 grid grid-cols-3 gap-3">
                 <div class="rounded-2xl bg-ink-50 p-3 md:p-4">
                     <div class="flex items-center gap-2 text-xs font-semibold text-ink-500"><Zap :size="14" class="text-brand-600" /> Live</div>
-                    <div class="mt-1 font-display text-2xl font-extrabold">{{ stats.live }}</div>
+                    <div class="mt-1 font-display text-xl font-extrabold">{{ stats.live }}</div>
                 </div>
                 <div class="rounded-2xl bg-ink-50 p-3 md:p-4">
                     <div class="flex items-center gap-2 text-xs font-semibold text-ink-500"><Eye :size="14" class="text-sky-600" /> Item views</div>
-                    <div class="mt-1 font-display text-2xl font-extrabold">{{ stats.views }}</div>
+                    <div class="mt-1 font-display text-xl font-extrabold">{{ stats.views }}</div>
                 </div>
                 <div class="rounded-2xl bg-ink-50 p-3 md:p-4">
                     <div class="flex items-center gap-2 text-xs font-semibold text-ink-500"><TrendingUp :size="14" class="text-violet-600" /> Store visits</div>
-                    <div class="mt-1 font-display text-2xl font-extrabold">{{ stats.store_views }}</div>
+                    <div class="mt-1 font-display text-xl font-extrabold">{{ stats.store_views }}</div>
                 </div>
             </div>
         </section>

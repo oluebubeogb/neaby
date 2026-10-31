@@ -1,4 +1,5 @@
-import { Home, Search, PlusCircle, Bell, UserRound, LayoutGrid, ShieldCheck, ShoppingBag, Heart, Package, Repeat2, Crown } from 'lucide-vue-next';
+import { Home, Search, PlusCircle, Bell, UserRound, LayoutGrid, ShieldCheck, Heart, Package, Repeat2, Crown, MessageCircle } from 'lucide-vue-next';
+import CartIcon from '@/Components/icons/CartIcon.vue';
 
 /** Primary destinations — the same five everywhere, presented per breakpoint. */
 export function primaryNav(user, counts = {}) {
@@ -20,7 +21,8 @@ export function primaryNav(user, counts = {}) {
 export function secondaryNav(user, counts = {}, features = {}, entitlements = []) {
     const items = [{ key: 'categories', label: 'Categories', icon: LayoutGrid, href: route('categories.index'), match: ['categories.*'] }];
     if (user) {
-        if (features?.checkout !== false) items.push({ key: 'cart', label: 'Cart', icon: ShoppingBag, href: route('cart.index'), match: ['cart.*', 'checkout.*'], badge: counts?.cart || 0 });
+        items.push({ key: 'messages', label: 'Messages', icon: MessageCircle, href: route('messages.index'), match: ['messages.*'], badge: counts?.messages || 0 });
+        if (features?.checkout !== false) items.push({ key: 'cart', label: 'Cart', icon: CartIcon, href: route('cart.index'), match: ['cart.*', 'checkout.*'], badge: counts?.cart || 0 });
         items.push({ key: 'orders', label: 'Orders', icon: Package, href: route('orders.index'), match: ['orders.*'] });
         items.push({ key: 'saved', label: 'Saved', icon: Heart, href: route('saved.index'), match: ['saved.*'] });
         items.push({ key: 'resell', label: 'Resell', icon: Repeat2, href: route('resell.index'), match: ['resell.*', 'requests.*'] });

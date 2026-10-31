@@ -43,7 +43,7 @@ const features = [
                     <span class="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/70 px-3 py-1 text-xs font-semibold text-brand-800 backdrop-blur">
                         <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" /> Now open for sellers in Nigeria
                     </span>
-                    <h1 class="mt-6 font-display text-[2.6rem] font-extrabold leading-[1.02] tracking-[-0.04em] text-ink-900 sm:text-6xl lg:text-7xl">
+                    <h1 class="mt-6 font-display text-[2rem] font-extrabold leading-[1.05] tracking-[-0.035em] text-ink-900 sm:text-[2.75rem] lg:text-5xl">
                         Shop the stores<br class="hidden sm:block" />
                         <span class="bg-gradient-to-r from-brand-500 via-emerald-500 to-teal-500 bg-clip-text text-transparent"> near you.</span>
                     </h1>
@@ -76,7 +76,7 @@ const features = [
             <section v-if="products.length" class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
                 <div class="mb-5 flex items-end justify-between">
                     <div>
-                        <h2 class="font-display text-2xl font-extrabold tracking-tight text-ink-900 md:text-3xl">Fresh on neaby</h2>
+                        <h2 class="font-display text-xl font-extrabold tracking-tight text-ink-900 md:text-[1.375rem]">Fresh on neaby</h2>
                         <p class="mt-1 text-sm text-ink-500">{{ stats.products }} items from {{ stats.stores }} stores and counting.</p>
                     </div>
                     <Link :href="route('home')" class="btn-ghost hidden sm:inline-flex">See all <ArrowRight :size="16" /></Link>
@@ -102,7 +102,7 @@ const features = [
                     <div class="absolute -bottom-24 -left-16 h-72 w-72 animate-drift-alt rounded-full bg-teal-400/25 blur-3xl" />
                     <div class="relative">
                         <IconCircle color="#38cc83" :size="56" class="mx-auto"><Share2 :size="24" /></IconCircle>
-                        <h2 class="mt-5 font-display text-3xl font-extrabold tracking-tight md:text-4xl">Your store. One link. Everywhere.</h2>
+                        <h2 class="mt-5 font-display text-xl font-extrabold tracking-tight md:text-2xl">Your store. One link. Everywhere.</h2>
                         <p class="mx-auto mt-3 max-w-lg text-white/70">Share your neaby store on WhatsApp, Instagram and TikTok. Buyers see a fast, beautiful page — no app needed.</p>
                         <Link :href="route('register')" class="btn-primary btn-lg mt-8">Start selling free <ArrowRight :size="18" /></Link>
                     </div>

@@ -26,7 +26,7 @@ const cancel = (s) => confirm('Cancel? You keep access until the end of the curr
                 <div class="flex flex-wrap items-start gap-4">
                     <IconCircle :color="meta[t].color" :size="48"><component :is="meta[t].icon" :size="22" /></IconCircle>
                     <div class="min-w-0 flex-1">
-                        <h2 class="font-display text-xl font-extrabold">{{ meta[t].title }}</h2>
+                        <h2 class="font-display text-lg font-extrabold">{{ meta[t].title }}</h2>
                         <p class="mt-1 max-w-xl text-sm text-ink-500">{{ meta[t].blurb }}</p>
                     </div>
                     <div v-if="current[t]" class="rounded-2xl bg-brand-50 px-4 py-2 text-sm">
@@ -37,7 +37,7 @@ const cancel = (s) => confirm('Cancel? You keep access until the end of the curr
                 </div>
                 <div class="mt-5 grid gap-3 sm:grid-cols-2">
                     <div v-for="p in plans[t]" :key="p.code" class="rounded-2xl border border-ink-200 p-4">
-                        <div class="flex items-baseline justify-between"><span class="font-semibold">{{ p.name }}</span><span class="font-display text-2xl font-extrabold">{{ p.price }}<span class="text-sm font-medium text-ink-500">/{{ p.interval === 'yearly' ? 'yr' : 'mo' }}</span></span></div>
+                        <div class="flex items-baseline justify-between"><span class="font-semibold">{{ p.name }}</span><span class="font-display text-xl font-extrabold">{{ p.price }}<span class="text-sm font-medium text-ink-500">/{{ p.interval === 'yearly' ? 'yr' : 'mo' }}</span></span></div>
                         <ul class="mt-3 grid gap-1 text-sm text-ink-600"><li v-for="f in p.features" :key="f" class="flex gap-2"><Check :size="15" class="mt-0.5 shrink-0 text-brand-600" /> {{ f }}</li></ul>
                         <button class="btn-primary mt-4 w-full" :disabled="busy === p.code || (meta[t].needsStore && !hasStore)" @click="buy(p)">{{ current[t] && current[t].plan_code === p.code ? 'Renew / extend' : current[t] ? 'Switch / extend' : 'Join' }}</button>
                         <p v-if="meta[t].needsStore && !hasStore" class="hint mt-1">Create a store first.</p>

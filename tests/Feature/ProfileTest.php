@@ -61,20 +61,26 @@ class ProfileTest extends TestCase
         $this->assertNotNull($user->refresh()->email_verified_at);
     }
 
-    public function test_user_can_delete_their_account(): void
+    public function test_user_can_delete_their_account_via_emailed_link(): void
     {
+        \Illuminate\Support\Facades\Notification::fake();
         $user = User::factory()->create();
 
-        $response = $this
-            ->actingAs($user)
-            ->delete('/profile', [
-                'password' => 'password',
-            ]);
-
-        $response
+        $this->actingAs($user)
+            ->delete('/profile', ['password' => 'password', 'confirm_email' => $user->email])
             ->assertSessionHasNoErrors()
-            ->assertRedirect('/');
+            ->assertRedirect(route('profile.edit'));
 
+        // Nothing is deleted until the signed link is used.
+        $this->assertNotNull($user->fresh());
+        $url = null;
+        \Illuminate\Support\Facades\Notification::assertSentTo($user, \App\Notifications\ConfirmAccountDeletion::class, function ($n) use (&$url) {
+            $url = $n->url;
+
+            return true;
+        });
+
+        $this->actingAs($user)->post($url)->assertRedirect('/');
         $this->assertGuest();
         $this->assertNull($user->fresh());
     }
@@ -88,6 +94,7 @@ class ProfileTest extends TestCase
             ->from('/profile')
             ->delete('/profile', [
                 'password' => 'wrong-password',
+                'confirm_email' => $user->email,
             ]);
 
         $response

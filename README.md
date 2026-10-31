@@ -100,6 +100,19 @@ docker-compose.yml      LOCAL DEV ONLY: postgres:17 + redis:7
 | `/sell/resale` | Supplier: open products to resellers, supplier/min price, terms, fulfilment, block resellers |
 | `/admin/plans`, `/admin/analytics`, `/admin/refunds`, `/admin/sponsored` | Plan prices + grants, platform analytics, refunds, sponsored moderation |
 
+**UX pass — messaging, calls, QR commerce**
+
+| Path | What |
+|---|---|
+| `/messages`, `/messages/{id}` | 1:1 chat (text, images, voice notes) with product/store context; two-pane on desktop |
+| `POST /messages/start` | Open (or reuse) a thread from a product, store or profile ("Message" control) |
+| `/messages/media/{message}` | Chat images/voice — served only to the two participants |
+| `POST /messages/{id}/call`, `/calls/{id}/…` | WebRTC voice call + HTTP-polled signalling (offer/answer/ICE) |
+| `/q/{code}`, `/q/{code}.png`, `POST /q/{code}/add` | Seller QR code landing (discount, expiry), PNG, add to cart |
+| `/sell/qr` | Seller QR codes: create (discount %/₦, preset size/qty, max uses, expiry), toggle, download, delete |
+| `/availability?field=username\|email&value=` | Live availability check (sign-up and settings), throttled 60/min |
+| `/profile/delete/confirm` (signed) | Account deletion — only after clicking the emailed link |
+
 **Rules enforced server-side**
 - The supplier/reseller price is only ever serialised for users with the `reseller.access` entitlement (or the owning supplier); public product JSON, Inertia props and share cards never contain it.
 - Shared inventory: reseller offers point at the supplier's product stock — never copied. Orders and accepted stock holds both use `reserved_quantity` with row locks, so stock can't go negative or be double-sold.
@@ -232,6 +245,17 @@ and `php artisan storage:link`. Uploads up to 100 MB per request are allowed by 
 | `NEABY_SELLER_PRO_ENABLED` | | `true` | Seller Pro plan (90-day insights + export) |
 | `MAIL_MAILER` + `MAIL_*` | | `log` | Password reset + notices. `log` writes them to container logs |
 | `MAIL_FROM_ADDRESS` `MAIL_FROM_NAME` | | `hello@neaby.ng` / `neaby` | |
+| `NEABY_MESSAGING_ENABLED` | | `true` | 1:1 chat on/off |
+| `NEABY_CHAT_MAX_IMAGE_KB` `NEABY_CHAT_MAX_VOICE_KB` | | `1536` / `1024` | Upload caps (images are already compressed to WebP in the browser) |
+| `NEABY_CHAT_MAX_VOICE_SECONDS` | | `120` | Voice-note length cap |
+| `NEABY_CHAT_MAX_PER_MINUTE` | | `30` | Messages per user per minute |
+| `NEABY_CHAT_POLL_SECONDS` `NEABY_CHAT_PULSE_SECONDS` | | `4` / `10` | Open-thread poll / global unread + incoming-call pulse. Paused while the tab is hidden |
+| `NEABY_CALLS_ENABLED` | | `true` | WebRTC voice calls |
+| `NEABY_STUN_URLS` | | Google STUN | Comma-separated |
+| `NEABY_TURN_URL` `NEABY_TURN_USERNAME` `NEABY_TURN_CREDENTIAL` | prod: recommended | `turn:turn.example.com:3478?transport=udp` | TURN relay (coturn). Without it calls fail between strict/symmetric NATs |
+| `NEABY_CALL_RING_SECONDS` | | `40` | Then the call is marked missed |
+| `NEABY_QR_MAX_ACTIVE_PER_STORE` | | `100` | Live seller QR codes per store |
+| `NEABY_QR_MAX_DISCOUNT_PERCENT` | | `90` | Cap for % and ₦ discounts on QR codes |
 
 ---
 
@@ -247,10 +271,42 @@ and `php artisan storage:link`. Uploads up to 100 MB per request are allowed by 
 - Refunds are recorded in neaby (`/admin/refunds`); with Monnify, issue the refund in the Monnify
   dashboard and then mark it processed.
 
+## Messaging, calls and QR commerce
+
+- **Chat** — text, images (resized to ≤1280px and re-encoded to WebP in the browser before upload) and voice
+  notes (Opus ~24 kbps, `preload="none"` so they don't download until played). Files live on the upload disk
+  under random ULID names but are only ever streamed through `/messages/media/{id}` after a participant check.
+- **Realtime without websockets** — the open thread polls every `NEABY_CHAT_POLL_SECONDS`; a light "pulse"
+  (unread count + incoming call) runs every `NEABY_CHAT_PULSE_SECONDS`. Both pause when the tab is hidden.
+- **Voice calls** — 1:1 WebRTC audio (mono Opus capped at 24 kbps, DTX, echo cancellation). Signalling
+  (offer/answer/ICE) goes over plain HTTP polling and is deleted when the call ends; a call record
+  ("Voice call · 02:13", "Missed voice call") is left in the thread. Media is peer-to-peer.
+  STUN works on most home/mobile networks; **production should add a TURN server**, e.g. coturn:
+  ```
+  # /etc/turnserver.conf (minimal)
+  listening-port=3478
+  fingerprint
+  lt-cred-mech
+  user=neaby:change-me
+  realm=neaby.ng
+  ```
+  then set `NEABY_TURN_URL=turn:turn.neaby.ng:3478?transport=udp,turn:turn.neaby.ng:3478?transport=tcp`,
+  `NEABY_TURN_USERNAME=neaby`, `NEABY_TURN_CREDENTIAL=change-me` and open UDP/TCP 3478 (+ relay range 49152–65535/udp).
+- **QR commerce** — sellers create codes at `/sell/qr` (optional %/₦ discount, preset options and quantity,
+  max uses, expiry). Buyers scan from Cart or Search (camera via `BarcodeDetector`, falling back to a lazily
+  loaded jsQR; or upload a photo of the code). Only neaby links are opened. The landing page adds the item to
+  the cart with the discount applied; size/quantity stay adjustable unless the seller locked them. Discounts
+  are re-validated at checkout (expired/used-up codes fall back to the normal price).
+- **Account deletion** — Settings → Delete account asks for the password and the account email, then emails a
+  signed link (valid 30 min). Nothing is deleted until the link is opened and confirmed. With `MAIL_MAILER=log`
+  the link is only in the log (`storage/logs` or container logs).
+
 ## Known limits
 
 - AI titles/descriptions use `FakeListingAi` (offline, builds from the seller's words) unless `LISTING_AI_DRIVER=openai`.
 - Monnify refunds are not automated (see above). Payouts/settlement to sellers are outside neaby.
+- Messaging/calls use HTTP polling (no websocket server): messages arrive within a few seconds, not instantly. Calls need a TURN server on strict NATs; there's no video, group calling or push notification for calls when the app isn't open.
+- The availability endpoint reveals whether an email is registered (throttled to 60/min per IP).
 - Email clients that block web fonts (e.g. Gmail) fall back to Trebuchet MS/Arial for the mail wordmark; Apple Mail, iOS and most others render Comfortaa.
 
 ## Demo data
@@ -313,6 +369,8 @@ Every demo email is verified. Example: email `neaby1@beuden.com.ng`, password `n
 - Carts, saved items, product views, shares, QR/share visits, enquiries and card downloads (insights have data).
 - Sponsored placements (3 active, 1 ended), a completed CSV import batch with a failed row.
 - Inbox: welcome, order, resale, membership, sponsored, import, store tips and admin notices — read and unread.
+- Chats: three text threads between demo buyers and sellers (with product/store context), and one live
+  10%-off QR code (14 days, 50 uses) for each of the first four stores.
 
 ### Demo photos (small, fetched on seed — not in Git)
 

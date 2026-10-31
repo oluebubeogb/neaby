@@ -12,7 +12,7 @@ class Store extends Model
     public const RESERVED_SLUGS = [
         'admin', 'api', 'app', 'home', 'search', 'sell', 'inbox', 'profile', 'login', 'register',
         'logout', 'settings', 'neaby', 'support', 'help', 'store', 'stores', 'p', 's', 'u', 'c',
-        'categories', 'sitemap', 'storage', 'build', 'up', 'webhooks', 'about', 'terms', 'privacy',
+        'categories', 'messages', 'calls', 'q', 'qr', 'sitemap', 'storage', 'build', 'up', 'webhooks', 'about', 'terms', 'privacy',
     ];
 
     protected $fillable = [

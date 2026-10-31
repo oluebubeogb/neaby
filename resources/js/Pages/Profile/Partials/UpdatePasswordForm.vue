@@ -28,7 +28,7 @@ const updatePassword = () => {
 
 <template>
     <section>
-        <h2 class="font-display text-lg font-bold">Password</h2>
+        <h2 class="font-display text-base font-bold">Password</h2>
         <p class="mt-1 text-sm text-ink-500">Use a long, unique password to keep your store safe.</p>
 
         <form class="mt-6 space-y-5" @submit.prevent="updatePassword">

@@ -33,6 +33,10 @@
     h1, h2, h3 {
         @apply font-display tracking-tight;
     }
+    /* Social-app scale: headings stay bold/decorated but close to body size. */
+    h1 { @apply text-xl leading-tight md:text-[1.375rem]; }
+    h2 { @apply text-base md:text-lg; }
+    h3 { @apply text-[15px]; }
     :focus-visible {
         @apply outline-none ring-2 ring-brand-400 ring-offset-2 ring-offset-white;
     }
@@ -74,6 +78,24 @@
     .icon-btn {
         @apply inline-flex h-10 w-10 items-center justify-center rounded-full text-ink-600 transition hover:bg-ink-100 hover:text-ink-900 active:scale-95;
     }
+    /* Icon-only action (paired with <Tip>): same footprint as .btn-lg. */
+    .icon-btn-lg {
+        @apply inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-ink-200 bg-white text-ink-700 transition hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 active:scale-95 disabled:pointer-events-none disabled:opacity-50;
+    }
+    .icon-btn-primary {
+        @apply icon-btn-lg border-transparent bg-brand-500 text-white shadow-glow hover:border-transparent hover:bg-brand-600 hover:text-white;
+    }
+    .icon-btn-dark {
+        @apply icon-btn-lg border-transparent bg-ink-900 text-white hover:border-transparent hover:bg-ink-800 hover:text-white;
+    }
+    /* Immersive viewer rail. */
+    .immersive-btn {
+        @apply inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/15 text-white ring-1 ring-white/20 backdrop-blur-md transition hover:bg-white/25 active:scale-95 disabled:opacity-50;
+    }
+    /* Any overlay surface (sheets, popovers, scrims) blurs what's behind it. */
+    .scrim {
+        @apply bg-ink-950/40 backdrop-blur-md;
+    }
     .input {
         @apply block w-full rounded-2xl border-ink-200 bg-white px-4 py-3 text-[15px] text-ink-900 shadow-sm placeholder:text-ink-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-100;
     }
@@ -91,7 +113,7 @@
         @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide;
     }
     .section-title {
-        @apply font-display text-lg font-bold text-ink-900 md:text-xl;
+        @apply font-display text-base font-bold text-ink-900 md:text-[17px];
     }
     .no-scrollbar { scrollbar-width: none; }
     .no-scrollbar::-webkit-scrollbar { display: none; }

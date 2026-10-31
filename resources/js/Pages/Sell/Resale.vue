@@ -21,11 +21,11 @@ const margin = (p) => { const s = Number(edits[p.id].resale_price); return s ? M
             <Link :href="route('membership.index')" class="btn-dark btn-sm">See plans</Link>
         </div>
         <div v-if="analytics" class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-            <div class="surface p-4"><div class="text-xs text-ink-500">Reseller offers</div><div class="font-display text-2xl font-extrabold">{{ analytics.offers }}</div></div>
-            <div class="surface p-4"><div class="text-xs text-ink-500">Offer views (30d)</div><div class="font-display text-2xl font-extrabold">{{ analytics.reseller_views_30d }}</div></div>
-            <div class="surface p-4"><div class="text-xs text-ink-500">Enquiries (30d)</div><div class="font-display text-2xl font-extrabold">{{ analytics.reseller_enquiries_30d }}</div></div>
-            <div class="surface p-4"><div class="text-xs text-ink-500">Open requests</div><div class="font-display text-2xl font-extrabold">{{ analytics.open_requests }}</div></div>
-            <div class="surface p-4"><div class="text-xs text-ink-500">Accepted</div><div class="font-display text-2xl font-extrabold">{{ analytics.accepted_requests }}</div></div>
+            <div class="surface p-4"><div class="text-xs text-ink-500">Reseller offers</div><div class="font-display text-xl font-extrabold">{{ analytics.offers }}</div></div>
+            <div class="surface p-4"><div class="text-xs text-ink-500">Offer views (30d)</div><div class="font-display text-xl font-extrabold">{{ analytics.reseller_views_30d }}</div></div>
+            <div class="surface p-4"><div class="text-xs text-ink-500">Enquiries (30d)</div><div class="font-display text-xl font-extrabold">{{ analytics.reseller_enquiries_30d }}</div></div>
+            <div class="surface p-4"><div class="text-xs text-ink-500">Open requests</div><div class="font-display text-xl font-extrabold">{{ analytics.open_requests }}</div></div>
+            <div class="surface p-4"><div class="text-xs text-ink-500">Accepted</div><div class="font-display text-xl font-extrabold">{{ analytics.accepted_requests }}</div></div>
         </div>
         <div class="mb-3 flex gap-2"><Link :href="route('requests.index', { tab: 'incoming' })" class="btn-soft btn-sm"><Repeat2 :size="14" /> Reseller requests</Link></div>
         <div class="grid gap-3">

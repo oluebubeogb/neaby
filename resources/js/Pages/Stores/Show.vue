@@ -1,10 +1,14 @@
 <script setup>
 import { Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { Instagram, MapPin, MessageCircle, PackageOpen, Pencil, Plus, Share2 } from 'lucide-vue-next';
+import { BadgeCheck, Instagram, MapPin, PackageOpen, Pencil, Plus, Share2 } from 'lucide-vue-next';
+import ProfileHero from '@/Components/ProfileHero.vue';
+import ReachOut from '@/Components/ReachOut.vue';
+import Tip from '@/Components/Tip.vue';
+import WhatsAppLine from '@/Components/icons/WhatsAppLine.vue';
+import { waLink } from '@/composables/wa';
 import AppShell from '@/Layouts/AppShell.vue';
 import SeoHead from '@/Components/SeoHead.vue';
-import Avatar from '@/Components/Avatar.vue';
 import ProductGrid from '@/Components/ProductGrid.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import Pager from '@/Components/Pager.vue';
@@ -13,53 +17,36 @@ import ShareSheet from '@/Components/ShareSheet.vue';
 const props = defineProps({ store: Object, isOwner: Boolean, products: Object, storeCategories: Array, activeCategory: String, shareUrl: String, seo: Object });
 
 const url = computed(() => route('stores.show', props.store.slug));
-const wa = computed(() => {
-    if (!props.store.whatsapp) return null;
-    let n = props.store.whatsapp.replace(/[^0-9]/g, '');
-    if (n.startsWith('0')) n = '234' + n.slice(1);
-    return `https://wa.me/${n}?text=${encodeURIComponent(`Hi ${props.store.name}! I found your store on neaby: ${url.value}`)}`;
-});
-const copied = ref(false);
+const wa = computed(() => waLink(props.store.whatsapp, `Hi ${props.store.name}! I found your store on neaby: ${url.value}`));
 const sharing = ref(false);
 function share() { sharing.value = true; }
 </script>
 
 <template>
     <SeoHead :seo="seo" />
-    <AppShell :title="store.name" wide>
+    <AppShell wide>
         <!-- Hero -->
-        <section class="-mx-3 -mt-4 sm:mx-0 sm:mt-0">
-            <div class="relative h-40 overflow-hidden sm:h-52 sm:rounded-[2rem] md:h-64" :style="{ background: `linear-gradient(135deg, ${store.accent}, ${store.accent}99 55%, #0a4b31)` }">
-                <img v-if="store.cover" :src="store.cover" alt="" class="h-full w-full object-cover" />
-                <div v-else class="absolute -right-10 -top-16 h-64 w-64 animate-drift rounded-full bg-white/20 blur-3xl" />
-                <div class="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-            </div>
-            <div class="relative px-4 sm:px-6">
-                <div class="-mt-12 flex flex-col gap-4 sm:-mt-14 md:flex-row md:items-end">
-                    <Avatar :src="store.logo" :initials="store.initials" :accent="store.accent" :size="104" rounded="rounded-[1.75rem]" class="shadow-lift ring-4" />
-                    <div class="min-w-0 flex-1 md:pb-1">
-                        <h1 class="font-display text-2xl font-extrabold tracking-tight text-ink-900 md:text-3xl">{{ store.name }}</h1>
-                        <p v-if="store.tagline" class="mt-0.5 text-ink-600">{{ store.tagline }}</p>
-                        <div class="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-500">
-                            <span v-if="store.city || store.state" class="inline-flex items-center gap-1"><MapPin :size="14" /> {{ [store.city, store.state].filter(Boolean).join(', ') }}</span>
-                            <span>{{ store.products_count }} items</span>
-                            <span>Joined {{ store.joined }}</span>
-                            <Link v-if="store.owner" :href="route('users.show', store.owner.username)" class="hover:text-ink-800">@{{ store.owner.username }}</Link>
-                        </div>
-                    </div>
-                    <div class="flex flex-wrap gap-2 md:pb-1">
-                        <template v-if="isOwner">
-                            <Link :href="route('sell.products.create')" class="btn-primary"><Plus :size="17" /> Add item</Link>
-                            <Link :href="route('sell.store.edit')" class="btn-ghost"><Pencil :size="16" /> Edit store</Link>
-                        </template>
-                        <a v-else-if="wa" :href="wa" target="_blank" rel="noopener" class="btn-primary"><MessageCircle :size="17" /> WhatsApp</a>
-                        <a v-if="store.instagram" :href="`https://instagram.com/${store.instagram.replace('@', '')}`" target="_blank" rel="noopener" class="btn-ghost" aria-label="Instagram"><Instagram :size="17" /></a>
-                        <button class="btn-ghost" @click="share"><Share2 :size="16" /> {{ copied ? 'Copied' : 'Share' }}</button>
-                    </div>
-                </div>
-                <p v-if="store.description" class="mt-4 max-w-3xl whitespace-pre-line text-[15px] leading-relaxed text-ink-600">{{ store.description }}</p>
-            </div>
-        </section>
+        <ProfileHero :cover="store.cover" :accent="store.accent" :avatar="store.logo" :initials="store.initials" square :name="store.name" :handle="store.owner ? `by @${store.owner.username}` : null" :tagline="store.tagline">
+            <template #badge><BadgeCheck :size="18" class="text-brand-500" aria-label="Store" /></template>
+            <template #actions>
+                <template v-if="isOwner">
+                    <Tip label="Add item"><Link :href="route('sell.products.create')" class="icon-btn-primary" aria-label="Add item"><Plus :size="19" /></Link></Tip>
+                    <Tip label="Edit store"><Link :href="route('sell.store.edit')" class="icon-btn-lg" aria-label="Edit store"><Pencil :size="17" /></Link></Tip>
+                </template>
+                <template v-else>
+                    <ReachOut :store="store.id" :name="store.name" variant="button" :draft="`Hi ${store.name}! I found your store on neaby.`" />
+                    <Tip v-if="wa" label="WhatsApp"><a :href="wa" target="_blank" rel="noopener" class="icon-btn-lg" aria-label="WhatsApp"><WhatsAppLine :size="19" /></a></Tip>
+                </template>
+                <Tip v-if="store.instagram" label="Instagram"><a :href="`https://instagram.com/${store.instagram.replace('@', '')}`" target="_blank" rel="noopener" class="icon-btn-lg" aria-label="Instagram"><Instagram :size="18" /></a></Tip>
+                <Tip label="Share"><button class="icon-btn-lg" aria-label="Share" @click="share"><Share2 :size="18" /></button></Tip>
+            </template>
+            <template #meta>
+                <span v-if="store.city || store.state" class="inline-flex items-center gap-1"><MapPin :size="13" /> {{ [store.city, store.state].filter(Boolean).join(', ') }}</span>
+                <span><b class="font-bold text-ink-800">{{ store.products_count }}</b> items</span>
+                <span>Joined {{ store.joined }}</span>
+            </template>
+            <p v-if="store.description" class="mt-3 max-w-3xl whitespace-pre-line text-[14px] leading-relaxed text-ink-600">{{ store.description }}</p>
+        </ProfileHero>
 
         <div v-if="store.status !== 'active'" class="mt-6 rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-800">This store is suspended and hidden from the public.</div>
 

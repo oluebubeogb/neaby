@@ -15,7 +15,7 @@ defineProps({ seo: Object });
             <div class="absolute -right-10 -top-16 h-48 w-48 rounded-full bg-violet-200/50 blur-3xl" />
             <div class="relative">
                 <IconCircle color="#7c3aed" :size="72" class="mx-auto"><Repeat2 :size="32" /></IconCircle>
-                <h1 class="mt-5 font-display text-2xl font-extrabold tracking-tight">Sell without holding stock</h1>
+                <h1 class="mt-5 font-display text-xl font-extrabold tracking-tight">Sell without holding stock</h1>
                 <p class="mx-auto mt-2 max-w-sm text-ink-500">Reseller members browse supplier products, see the supplier price, and publish their own offer at their own price.</p>
                 <ul class="mx-auto mt-5 grid max-w-xs gap-2 text-left text-sm">
                     <li class="flex gap-2"><Check :size="16" class="text-brand-600" /> Supplier prices &amp; terms</li>
