@@ -5,11 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 <meta name="color-scheme" content="light">
+<meta name="x-apple-disable-message-reformatting">
 <meta name="supported-color-schemes" content="light">
 <style>
 @media only screen and (max-width: 600px) {
 .inner-body {
 width: 100% !important;
+border-radius: 0 !important;
+border-left: 0 !important;
+border-right: 0 !important;
+}
+.content-cell {
+padding: 28px 22px 24px !important;
 }
 
 .footer {
@@ -32,6 +39,13 @@ font-style: normal;
 font-weight: 700;
 font-display: swap;
 src: url('{{ rtrim(config('app.url'), '/') }}/fonts/comfortaa-700.woff2') format('woff2');
+}
+@font-face {
+font-family: 'Neaby Naira';
+font-style: normal;
+font-weight: 100 900;
+src: url('{{ rtrim(config('app.url'), '/') }}/fonts/naira-var.woff2') format('woff2');
+unicode-range: U+20A6;
 }
 .neaby-wordmark {
 font-family: 'Comfortaa', 'Trebuchet MS', 'Segoe UI', Arial, sans-serif !important;

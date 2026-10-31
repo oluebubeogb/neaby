@@ -1,7 +1,7 @@
 <script setup>
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { ArrowLeft, ImagePlus, Loader2, MessageCircle, Mic, Phone, PhoneMissed, Send, Square, Trash2, X } from 'lucide-vue-next';
+import { ArrowLeft, Expand, ImagePlus, Loader2, MessageCircle, Mic, Phone, PhoneMissed, Send, Square, Trash2, X } from 'lucide-vue-next';
 import AppShell from '@/Layouts/AppShell.vue';
 import SeoHead from '@/Components/SeoHead.vue';
 import Avatar from '@/Components/Avatar.vue';
@@ -123,26 +123,63 @@ async function sendText() {
 }
 function onEnter(e) { if (!e.shiftKey && !e.isComposing) { e.preventDefault(); sendText(); } }
 
+// ── attachment review: pick/record → preview → Send or Cancel ──
+// draft = { type: 'image', file, w, h, url } | { type: 'voice', blob, mime, ext, duration, url }
+const draftAttachment = ref(null);
+const draftSend = ref(null);
+
+function discardDraft() {
+    const d = draftAttachment.value;
+    if (!d) return;
+    document.querySelectorAll('audio[data-vn]').forEach((a) => a.pause());
+    URL.revokeObjectURL(d.url);
+    draftAttachment.value = null;
+    nextTick(() => input.value?.focus());
+}
+function onDraftKey(e) {
+    if (!draftAttachment.value) return;
+    if (e.key === 'Escape') { e.preventDefault(); discardDraft(); }
+}
+
 async function pickImage(e) {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f || !props.active) return;
     error.value = null;
     sending.value = true;
-    let tmp = null;
     try {
         const { file, w, h } = await compressImage(f);
-        const preview = URL.createObjectURL(file);
-        tmp = optimistic({ type: 'image', media: preview, meta: { w, h } });
-        const fd = new FormData();
-        fd.append('type', 'image');
-        fd.append('file', file);
-        fd.append('w', w);
-        fd.append('h', h);
-        const r = await postJson(route('messages.send', props.active.id), fd);
-        settle(tmp, { ...r.message, media: preview }); // keep the local blob — no re-download
-    } catch (err) { tmp ? fail(tmp, err) : (error.value = 'Couldn’t read that image.'); }
+        if (draftAttachment.value) discardDraft();
+        draftAttachment.value = { type: 'image', file, w, h, url: URL.createObjectURL(file) };
+        nextTick(() => draftSend.value?.focus());
+    } catch (_) { error.value = 'Couldn’t read that image.'; }
     sending.value = false;
+}
+
+async function sendDraft() {
+    const d = draftAttachment.value;
+    if (!d || !props.active) return;
+    draftAttachment.value = null; // keep d.url alive: the optimistic bubble shows it
+    document.querySelectorAll('audio[data-vn]').forEach((a) => a.pause());
+    error.value = null;
+    const tmp = d.type === 'image'
+        ? optimistic({ type: 'image', media: d.url, meta: { w: d.w, h: d.h } })
+        : optimistic({ type: 'voice', media: d.url, meta: { duration: d.duration } });
+    try {
+        const fd = new FormData();
+        fd.append('type', d.type);
+        if (d.type === 'image') {
+            fd.append('file', d.file);
+            fd.append('w', d.w);
+            fd.append('h', d.h);
+        } else {
+            fd.append('file', new File([d.blob], `voice.${d.ext}`, { type: d.mime }));
+            fd.append('duration', d.duration.toFixed(1));
+        }
+        const r = await postJson(route('messages.send', props.active.id), fd);
+        settle(tmp, { ...r.message, media: d.url }); // keep the local blob — no re-download
+    } catch (err) { fail(tmp, err); }
+    nextTick(() => input.value?.focus());
 }
 
 // ── voice notes ───────────────────────────────────────────
@@ -178,24 +215,19 @@ function stopRec(cancel = false) {
     clearInterval(r.timer);
     if (r.recorder.state !== 'inactive') r.recorder.stop();
 }
-async function finishRec(r) {
+function finishRec(r) {
     r.stream.getTracks().forEach((t) => t.stop());
     rec.value = null;
     const duration = Math.min(maxVoice.value, (Date.now() - r.started) / 1000);
-    if (r.cancel || duration < 0.7 || !props.active) return;
-    const type = r.recorder.mimeType || 'audio/webm';
-    const blob = new Blob(r.chunks, { type });
-    const ext = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? 'm4a' : 'webm';
-    const local = URL.createObjectURL(blob);
-    const tmp = optimistic({ type: 'voice', media: local, meta: { duration } });
-    try {
-        const fd = new FormData();
-        fd.append('type', 'voice');
-        fd.append('file', new File([blob], `voice.${ext}`, { type }));
-        fd.append('duration', duration.toFixed(1));
-        const res = await postJson(route('messages.send', props.active.id), fd);
-        settle(tmp, { ...res.message, media: local });
-    } catch (e) { fail(tmp, e); }
+    if (r.cancel || !props.active) return;
+    if (duration < 0.7) { error.value = 'That was too short — hold on a little longer.'; return; }
+    const mime = r.recorder.mimeType || 'audio/webm';
+    const blob = new Blob(r.chunks, { type: mime });
+    const ext = mime.includes('ogg') ? 'ogg' : mime.includes('mp4') ? 'm4a' : 'webm';
+    if (draftAttachment.value) discardDraft();
+    // Review first: play it back, then send or bin it.
+    draftAttachment.value = { type: 'voice', blob, mime, ext, duration, url: URL.createObjectURL(blob) };
+    nextTick(() => draftSend.value?.focus());
 }
 
 // ── calls ─────────────────────────────────────────────────
@@ -213,8 +245,8 @@ onMounted(() => {
     }
     if (props.active) nextTick(() => input.value?.focus());
 });
-onBeforeUnmount(() => { clearTimeout(pollTimer); document.removeEventListener('visibilitychange', onVis); if (rec.value) stopRec(true); });
-watch(() => props.active?.id, () => { messages.value = []; load(); });
+onBeforeUnmount(() => { clearTimeout(pollTimer); document.removeEventListener('visibilitychange', onVis); if (rec.value) stopRec(true); discardDraft(); });
+watch(() => props.active?.id, () => { messages.value = []; if (rec.value) stopRec(true); discardDraft(); load(); });
 
 // ── display helpers ───────────────────────────────────────
 function time(iso) { return iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''; }
@@ -347,7 +379,23 @@ const imgStyle = (m) => {
                         <span class="text-sm font-semibold tabular-nums text-red-700">{{ formatClock(recSeconds) }}</span>
                         <span class="text-xs text-red-600/70">/ {{ formatClock(maxVoice) }}</span>
                         <Tip label="Discard" class="ml-auto"><button class="icon-btn text-red-600" aria-label="Discard voice note" @click="stopRec(true)"><Trash2 :size="18" /></button></Tip>
-                        <Tip label="Send voice note"><button class="icon-btn-primary h-10 w-10 rounded-full" aria-label="Send voice note" @click="stopRec(false)"><Square :size="15" class="fill-current" /></button></Tip>
+                        <Tip label="Stop & review"><button class="icon-btn-primary h-10 w-10 rounded-full" aria-label="Stop recording and review" @click="stopRec(false)"><Square :size="15" class="fill-current" /></button></Tip>
+                    </div>
+                    <!-- Review before sending -->
+                    <div v-else-if="draftAttachment" class="flex items-center gap-3 rounded-2xl border border-ink-100 bg-ink-50/70 p-2 pl-2.5" role="group" aria-label="Review attachment" @keydown="onDraftKey">
+                        <button v-if="draftAttachment.type === 'image'" type="button" class="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-ink-100 ring-1 ring-ink-100 sm:h-24 sm:w-24" aria-label="View full photo" @click="viewer = draftAttachment.url">
+                            <img :src="draftAttachment.url" alt="Photo to send" class="h-full w-full object-cover" />
+                            <span class="absolute bottom-1 right-1 rounded-full bg-ink-950/60 p-1 text-white"><Expand :size="11" /></span>
+                        </button>
+                        <div v-else class="min-w-0 flex-1 rounded-2xl bg-brand-500 px-3 py-2 text-white">
+                            <VoiceNote :src="draftAttachment.url" :duration="draftAttachment.duration" mine />
+                        </div>
+                        <div v-if="draftAttachment.type === 'image'" class="min-w-0 flex-1">
+                            <p class="text-sm font-semibold text-ink-900">Send this photo?</p>
+                            <p class="text-xs text-ink-500">{{ draftAttachment.w }}×{{ draftAttachment.h }} · {{ Math.max(1, Math.round(draftAttachment.file.size / 1024)) }} KB</p>
+                        </div>
+                        <Tip label="Cancel"><button type="button" class="icon-btn text-red-600" :aria-label="draftAttachment.type === 'image' ? 'Remove photo' : 'Discard voice note'" @click="discardDraft"><Trash2 :size="18" /></button></Tip>
+                        <Tip label="Send"><button ref="draftSend" type="button" class="icon-btn-primary h-10 w-10 rounded-full" :aria-label="draftAttachment.type === 'image' ? 'Send photo' : 'Send voice note'" @click="sendDraft"><Send :size="17" /></button></Tip>
                     </div>
                     <form v-else class="flex items-end gap-1.5" @submit.prevent="sendText">
                         <Tip label="Photo">

@@ -45,7 +45,9 @@ function share() { sharing.value = true; }
                 <span><b class="font-bold text-ink-800">{{ store.products_count }}</b> items</span>
                 <span>Joined {{ store.joined }}</span>
             </template>
-            <p v-if="store.description" class="mt-3 max-w-3xl whitespace-pre-line text-[14px] leading-relaxed text-ink-600">{{ store.description }}</p>
+            <template #description>
+                <p v-if="store.description" class="mt-1 line-clamp-4 max-w-2xl whitespace-pre-line text-[13.5px] leading-relaxed text-ink-600">{{ store.description }}</p>
+            </template>
         </ProfileHero>
 
         <div v-if="store.status !== 'active'" class="mt-6 rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-800">This store is suspended and hidden from the public.</div>

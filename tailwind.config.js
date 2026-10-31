@@ -17,9 +17,9 @@ export default {
                 xs: '420px',
             },
             fontFamily: {
-                sans: ['"Inter Variable"', 'Inter', ...defaultTheme.fontFamily.sans],
+                sans: ['"Neaby Naira"', '"Inter Variable"', 'Inter', ...defaultTheme.fontFamily.sans],
                 brand: ['Comfortaa', '"Plus Jakarta Sans Variable"', ...defaultTheme.fontFamily.sans],
-                display: ['"Plus Jakarta Sans Variable"', '"Plus Jakarta Sans"', ...defaultTheme.fontFamily.sans],
+                display: ['"Neaby Naira"', '"Plus Jakarta Sans Variable"', '"Plus Jakarta Sans"', ...defaultTheme.fontFamily.sans],
             },
             colors: {
                 brand: {
@@ -62,6 +62,7 @@ export default {
                     '0%,100%': { transform: 'translate3d(0,0,0) scale(1)' },
                     '50%': { transform: 'translate3d(4%,-3%,0) scale(1.08)' },
                 },
+                float: { '0%, 100%': { translate: '0 0' }, '50%': { translate: '0 -8px' } },
                 'drift-alt': {
                     '0%,100%': { transform: 'translate3d(0,0,0) scale(1)' },
                     '50%': { transform: 'translate3d(-5%,4%,0) scale(1.05)' },
@@ -74,6 +75,9 @@ export default {
             animation: {
                 drift: 'drift 22s ease-in-out infinite',
                 'drift-alt': 'drift-alt 28s ease-in-out infinite',
+                float: 'float 7s ease-in-out infinite',
+                'float-slow': 'float 9s ease-in-out -2s infinite',
+                'float-alt': 'float 8s ease-in-out -4s infinite',
                 rise: 'rise .35s cubic-bezier(.2,.8,.2,1) both',
             },
         },

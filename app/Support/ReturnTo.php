@@ -16,11 +16,18 @@ class ReturnTo
 {
     private const AUTH_PATHS = ['login', 'register', 'logout', 'forgot-password', 'reset-password', 'verify-email', 'confirm-password', 'email'];
 
+    /**
+     * Hub pages: landing on these after sign-in isn't "going back" to anything,
+     * so we open /home instead (the inbox used to win via the Referer / nav).
+     */
+    private const HUB_PATHS = ['', 'home', 'inbox', 'messages', 'notifications', 'dashboard', 'profile', 'settings', 'account'];
+
     public static function remember(Request $request): void
     {
         $explicit = self::safe($request, (string) $request->query('redirect', ''));
         if ($explicit) {
             $request->session()->put('url.intended', $explicit);
+            $request->session()->put('url.intended_explicit', true);
 
             return;
         }
@@ -29,7 +36,34 @@ class ReturnTo
         }
         if ($ref = self::safe($request, (string) $request->headers->get('referer', ''))) {
             $request->session()->put('url.intended', $ref);
+            $request->session()->forget('url.intended_explicit');
         }
+    }
+
+    /**
+     * Where to go right after sign-in / sign-up: an explicit ?redirect= always
+     * wins (e.g. "Buy now" → back to the product); any other remembered page
+     * is honoured only when it's real content; otherwise /home.
+     */
+    public static function afterAuth(Request $request): string
+    {
+        $home = route('home', absolute: false);
+        $intended = (string) $request->session()->pull('url.intended', '');
+        $explicit = (bool) $request->session()->pull('url.intended_explicit', false);
+        $url = $intended !== '' ? self::safe($request, $intended) : null;
+        if (! $url) {
+            return $home;
+        }
+        if ($explicit) {
+            return $url;
+        }
+        $path = trim((string) (parse_url($url, PHP_URL_PATH) ?? '/'), '/');
+        $first = explode('/', $path)[0];
+        if (in_array($first, self::HUB_PATHS, true)) {
+            return $home;
+        }
+
+        return $url;
     }
 
     public static function safe(Request $request, string $url): ?string

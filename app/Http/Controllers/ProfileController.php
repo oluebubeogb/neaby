@@ -68,9 +68,14 @@ class ProfileController extends Controller
             $user->avatar_path = $objects->putFile($request->file('avatar'), 'avatars');
         }
 
+        $emailChanged = $user->isDirty('email');
         $user->save();
 
-        return Redirect::route('profile.edit')->with('success', 'Profile saved.');
+        if ($emailChanged && ! \App\Support\SafeMail::attempt(fn () => $user->sendEmailVerificationNotification(), 'verify email (changed)')) {
+            return Redirect::route('profile.edit')->with('error', 'Profile saved, but we couldn\'t send the verification email. Try “resend” in a few minutes.');
+        }
+
+        return Redirect::route('profile.edit')->with('success', $emailChanged ? 'Profile saved — check your inbox to verify the new email.' : 'Profile saved.');
     }
 
     /**

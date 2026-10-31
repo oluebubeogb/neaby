@@ -243,8 +243,11 @@ and `php artisan storage:link`. Uploads up to 100 MB per request are allowed by 
 | `NEABY_SPONSORED_DAILY_PRICE_MINOR` | | `50000` | Kobo/day (₦500) |
 | `NEABY_SPONSORED_EVERY` | | `8` | Max 1 sponsored card per N feed items |
 | `NEABY_SELLER_PRO_ENABLED` | | `true` | Seller Pro plan (90-day insights + export) |
-| `MAIL_MAILER` + `MAIL_*` | | `log` | Password reset + notices. `log` writes them to container logs |
-| `MAIL_FROM_ADDRESS` `MAIL_FROM_NAME` | | `hello@neaby.ng` / `neaby` | |
+| `MAIL_MAILER` + `MAIL_*` | | `log` | Verify email, password reset + notices. `log` writes them to container logs. SMTP: `smtp` |
+| `MAIL_SCHEME` | | `null` | Empty/`null` = auto (STARTTLS on 587). `smtps`/`ssl` for port 465. Any spelling is normalised in `config/mail.php` |
+| `MAIL_HOST` `MAIL_PORT` `MAIL_USERNAME` `MAIL_PASSWORD` | for smtp | `mail.example.com` / `587` | |
+| `MAIL_FROM_ADDRESS` `MAIL_FROM_NAME` | | `hello@neaby.ng` / `neaby` | Must be an address the SMTP login may send as (alias), or servers reject it |
+| `MAIL_TIMEOUT` | | `15` | Seconds before an unreachable SMTP server gives up |
 | `NEABY_MESSAGING_ENABLED` | | `true` | 1:1 chat on/off |
 | `NEABY_CHAT_MAX_IMAGE_KB` `NEABY_CHAT_MAX_VOICE_KB` | | `1536` / `1024` | Upload caps (images are already compressed to WebP in the browser) |
 | `NEABY_CHAT_MAX_VOICE_SECONDS` | | `120` | Voice-note length cap |
@@ -258,6 +261,15 @@ and `php artisan storage:link`. Uploads up to 100 MB per request are allowed by 
 | `NEABY_QR_MAX_DISCOUNT_PERCENT` | | `90` | Cap for % and ₦ discounts on QR codes |
 
 ---
+
+### Mail checklist
+
+- Verify-email and password-reset mails are sent **immediately** (not queued), so they work even if the queue
+  worker is down. Order/membership notices go through the same mailer; an SMTP outage is logged
+  (`neaby mail failed: …`) and never breaks the page.
+- Test the live config from Coolify's *Terminal*: `php artisan neaby:mail-test you@example.com` — it prints the
+  resolved settings (password hidden) and the exact SMTP error if sending fails.
+- After changing `MAIL_*` in Coolify, redeploy (config is cached on boot).
 
 ## Payments: fake vs Monnify
 
@@ -381,6 +393,13 @@ Every demo email is verified. Example: email `neaby1@beuden.com.ng`, password `n
   `NEABY_DEMO_PHOTOS=false` skips downloads entirely (placeholders only).
 - `neaby:demo wipe` (or `NEABY_SEED_DEMO=wipe`) deletes every demo photo along with the demo rows, including the
   whole `storage/app/public/demo/` folder.
+- **Self-heal:** with `NEABY_SEED_DEMO=true`, every boot checks the demo users' avatars, store logos/covers and
+  product photos. If the rows exist but the files are gone (typically a redeploy without a persistent volume),
+  only the missing files are re-downloaded to the same paths — no rows change, nothing is wiped. Run it by hand
+  any time with `php artisan neaby:demo repair`.
+- **Keep photos across deploys (Coolify):** Application → *Storages* → *Add* → *Volume Mount*, Destination path
+  **`/var/www/html/storage/app/public`** (name e.g. `neaby-uploads`). This holds real uploads too — without it every
+  redeploy starts with an empty folder. Bind mount instead? `chown -R 33:33 <host path>` once.
 
 ### Removing the demo for good (before real use)
 

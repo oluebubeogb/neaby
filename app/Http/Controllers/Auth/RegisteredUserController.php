@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ReturnTo;
+use App\Support\SafeMail;
 use App\Support\Username;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
@@ -50,10 +51,16 @@ class RegisteredUserController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
-        event(new Registered($user));
+        // Registered → SendEmailVerificationNotification (User implements
+        // MustVerifyEmail). Sent inline; an SMTP hiccup never blocks sign-up.
+        $mailed = SafeMail::attempt(fn () => event(new Registered($user)), 'verify email (signup)');
 
         Auth::login($user);
 
-        return redirect()->intended(route('home', absolute: false));
+        $to = redirect()->to(ReturnTo::afterAuth($request));
+
+        return $mailed
+            ? $to->with('success', 'Welcome to neaby! We sent a verification link to '.$user->email.'.')
+            : $to->with('error', "Welcome to neaby! We couldn't send your verification email just now — resend it from Settings.");
     }
 }

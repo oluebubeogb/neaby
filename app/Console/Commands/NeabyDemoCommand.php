@@ -14,11 +14,12 @@ use Illuminate\Console\Command;
  *   php artisan neaby:demo seed --fresh    # wipe + rebuild
  *   php artisan neaby:demo wipe            # remove only demo users and everything they own
  *   php artisan neaby:demo status
+ *   php artisan neaby:demo repair          # re-download missing demo images, keep all data
  *   php artisan neaby:demo boot            # used by docker-entrypoint: reads NEABY_SEED_DEMO
  */
 class NeabyDemoCommand extends Command
 {
-    protected $signature = 'neaby:demo {action=status : seed|wipe|status|boot} {--fresh : wipe first when seeding} {--force : skip confirmation}';
+    protected $signature = 'neaby:demo {action=status : seed|wipe|status|repair|boot} {--fresh : wipe first when seeding} {--force : skip confirmation}';
 
     protected $description = 'Seed or wipe the neaby demo cast (neaby1@beuden.com.ng …, password = email). Never calls Listing AI.';
 
@@ -44,6 +45,7 @@ class NeabyDemoCommand extends Command
             'seed' => $this->seed(),
             'wipe' => $this->wipe(),
             'status' => $this->status(),
+            'repair' => $this->repair(),
             default => $this->invalid($action),
         };
     }
@@ -71,6 +73,21 @@ class NeabyDemoCommand extends Command
         return self::SUCCESS;
     }
 
+    private function repair(): int
+    {
+        if (! NeabyDemoSeeder::isSeeded()) {
+            $this->line('No demo users — nothing to repair.');
+
+            return self::SUCCESS;
+        }
+        $seeder = new NeabyDemoSeeder;
+        $seeder->setCommand($this);
+        $r = $seeder->repairImages();
+        $this->info("Demo images: checked {$r['checked']}, missing {$r['missing']}, restored {$r['restored']} ({$r['placeholders']} placeholder(s)). No data was wiped.");
+
+        return self::SUCCESS;
+    }
+
     private function status(): int
     {
         $count = User::query()->where('email', 'like', 'neaby%@'.NeabyDemoSeeder::EMAIL_DOMAIN)->count();
@@ -83,7 +100,7 @@ class NeabyDemoCommand extends Command
 
     private function invalid(string $a): int
     {
-        $this->error("Unknown action “{$a}”. Use seed, wipe, status or boot.");
+        $this->error("Unknown action “{$a}”. Use seed, wipe, status, repair or boot.");
 
         return self::INVALID;
     }

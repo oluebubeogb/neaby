@@ -308,7 +308,10 @@ class NeabyDemoSeeder extends Seeder
         app()->instance(ListingAi::class, new FakeListingAi);
 
         if (self::isSeeded()) {
-            $this->command?->info('Neaby demo data already present — nothing to do (use neaby:demo seed --fresh to rebuild).');
+            $r = $this->repairImages();
+            $this->command?->info($r['missing']
+                ? "Neaby demo data already present — restored {$r['restored']}/{$r['missing']} missing demo image(s) ({$r['placeholders']} offline placeholder(s)); no data wiped."
+                : 'Neaby demo data already present and all demo images are on disk — nothing to do (use neaby:demo seed --fresh to rebuild).');
 
             return;
         }
@@ -880,7 +883,8 @@ class NeabyDemoSeeder extends Seeder
 
     // ── Real photos: Pexels CDN (free licence), fetched once at seed time ─
 
-    private function fetchPhotos(): void
+    /** @param  array<string, true>|null  $only  limit downloads to these keys (repair mode) */
+    private function fetchPhotos(?array $only = null): void
     {
         $flag = strtolower(trim((string) (getenv('NEABY_DEMO_PHOTOS') ?: env('NEABY_DEMO_PHOTOS', 'true'))));
         if (in_array($flag, ['false', '0', 'no', 'off'], true)) {
@@ -905,6 +909,12 @@ class NeabyDemoSeeder extends Seeder
         }
         foreach (self::AVATAR_PHOTOS as $id) {
             $wanted['a'.$id] = [$id, 320, 320];
+        }
+        if ($only !== null) {
+            $wanted = array_intersect_key($wanted, $only);
+            if (! $wanted) {
+                return;
+            }
         }
 
         $failed = 0;
@@ -998,6 +1008,110 @@ class NeabyDemoSeeder extends Seeder
         }
 
         return $line !== '' ? [...$lines, $line] : $lines;
+    }
+
+    // ── Self-heal: DB rows exist but the image files are gone ────────────
+    //
+    // Happens when the container is redeployed without a persistent volume on
+    // storage/app/public: Postgres keeps the demo cast, the JPEGs vanish. This
+    // re-downloads (or re-renders) ONLY the missing files at the exact same
+    // storage keys, so no DB rows change and nothing is wiped.
+
+    /** @return array{checked:int, missing:int, restored:int, placeholders:int} */
+    public function repairImages(): array
+    {
+        $objects = app(ObjectStore::class);
+        $stats = ['checked' => 0, 'missing' => 0, 'restored' => 0, 'placeholders' => 0];
+        $jobs = []; // [path, photoKey|null, placeholder closure, ?callable after-write]
+
+        foreach (self::USERS as $n => $_) {
+            $user = User::query()->where('email', "neaby{$n}@".self::EMAIL_DOMAIN)->first();
+            if (! $user) {
+                continue;
+            }
+            $avatarKey = 'a'.(self::AVATAR_PHOTOS[$n] ?? 0);
+            $avatarPath = $user->avatar_path ?: self::IMAGE_DIR."/avatars/{$user->id}.jpg";
+            $jobs[] = [$avatarPath, $avatarKey, null, $user->avatar_path ? null : fn ($key) => $user->forceFill(['avatar_path' => $key])->saveQuietly(),
+                // download failed and the old file is gone → fall back to the initials avatar instead of a broken image
+                $user->avatar_path ? fn () => $user->forceFill(['avatar_path' => null])->saveQuietly() : null];
+
+            $def = self::STORES[$n] ?? null;
+            $store = Store::query()->where('user_id', $user->id)->orderBy('id')->first();
+            if (! $def || ! $store) {
+                continue;
+            }
+            [$storeName, , $tagline, $accent, , , , $items] = $def;
+            $logoId = self::PRODUCT_PHOTOS[$n][0][0] ?? 0;
+            if ($store->logo_path) {
+                $jobs[] = [$store->logo_path, 'l'.$logoId, fn () => $this->photo($accent, $storeName, '', $n), null, null];
+            }
+            if ($store->cover_path) {
+                $jobs[] = [$store->cover_path, 'c'.(self::COVER_PHOTOS[$n] ?? 0), fn () => $this->photo($accent, $tagline, $storeName, $n + 7), null, null];
+            }
+
+            $titles = array_map(fn ($it) => $it[0], $items);
+            $products = Product::withTrashed()->where('store_id', $store->id)->with('images')->get();
+            foreach ($products as $product) {
+                $i = array_search($product->title, $titles, true);
+                foreach ($product->images as $img) {
+                    $s = max(0, (int) $img->sort - 1);
+                    $id = $i === false ? null : (self::PRODUCT_PHOTOS[$n][$i][$s] ?? null);
+                    $jobs[] = [$img->path, $id ? 'p'.$id : null, fn () => $this->photo($accent, $product->title, $storeName, ($i ?: 0) + $s * 3), null, null];
+                }
+            }
+        }
+
+        $missing = [];
+        foreach ($jobs as $job) {
+            $stats['checked']++;
+            try {
+                $exists = $objects->exists($job[0]);
+            } catch (\Throwable) {
+                $exists = false;
+            }
+            if (! $exists) {
+                $missing[] = $job;
+            }
+        }
+        $stats['missing'] = count($missing);
+        if (! $missing) {
+            return $stats;
+        }
+
+        $only = [];
+        foreach ($missing as $job) {
+            if ($job[1]) {
+                $only[$job[1]] = true;
+            }
+        }
+        $this->fetched = [];
+        $this->fetchPhotos($only);
+
+        foreach ($missing as [$path, $key, $placeholder, $after, $onFail]) {
+            $bytes = $key ? ($this->fetched[$key] ?? null) : null;
+            if ($bytes === null && $placeholder) {
+                $bytes = $placeholder();
+                $stats['placeholders']++;
+            }
+            if ($bytes === null) {
+                if ($onFail) {
+                    $onFail();
+                }
+
+                continue;
+            }
+            try {
+                $written = $objects->put($path, $bytes, 'image/jpeg');
+                if ($after) {
+                    $after($written);
+                }
+                $stats['restored']++;
+            } catch (\Throwable) {
+            }
+        }
+        Cache::forget('sitemap.xml');
+
+        return $stats;
     }
 
     // ── Wipe: removes ONLY demo-cast rows (and legacy @neaby.test demo) ──

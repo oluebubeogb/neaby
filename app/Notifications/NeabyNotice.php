@@ -23,7 +23,7 @@ class NeabyNotice extends Notification
     {
         $channels = ['database'];
         if ($this->mail && config('neaby.mail_notifications', true) && ! empty($notifiable->email)) {
-            $channels[] = 'mail';
+            $channels[] = \App\Notifications\Channels\SafeMailChannel::class;
         }
 
         return $channels;

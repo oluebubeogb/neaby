@@ -50,6 +50,29 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
+        // Branded copy for the built-in auth mails (both send synchronously —
+        // neither notification is queued — so no worker is needed for them).
+        \Illuminate\Auth\Notifications\VerifyEmail::toMailUsing(fn ($user, string $url) => (new \Illuminate\Notifications\Messages\MailMessage)
+            ->subject('Verify your email · neaby')
+            ->greeting('Welcome to neaby, '.($user->name ?: $user->username).' 👋')
+            ->line('Confirm this is your email so buyers and sellers nearby know you\'re real.')
+            ->action('Verify email', $url)
+            ->line('This link expires in '.config('auth.verification.expire', 60).' minutes.')
+            ->salutation('— The neaby team'));
+
+        \Illuminate\Auth\Notifications\ResetPassword::toMailUsing(function ($user, string $token) {
+            $url = route('password.reset', ['token' => $token, 'email' => $user->getEmailForPasswordReset()]);
+            $minutes = config('auth.passwords.'.config('auth.defaults.passwords').'.expire', 60);
+
+            return (new \Illuminate\Notifications\Messages\MailMessage)
+                ->subject('Reset your password · neaby')
+                ->greeting('Hi '.($user->name ?: $user->username).',')
+                ->line('Someone (hopefully you) asked to reset your neaby password.')
+                ->action('Choose a new password', $url)
+                ->line("This link expires in {$minutes} minutes. If you didn't ask for it, you can safely ignore this email.")
+                ->salutation('— The neaby team');
+        });
+
         Gate::define('admin', fn (User $user) => $user->isAdmin());
 
         RateLimiter::for('ai', fn (Request $r) => Limit::perMinute(12)->by($r->user()?->id ?: $r->ip()));

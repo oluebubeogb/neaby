@@ -129,14 +129,15 @@ class QrCodes
         imagefilledellipse($im, $cx, $cy, 2 * ($r - $ringW), 2 * ($r - $ringW), imagecolorallocate($im, 255, 255, 255));
 
         $font = resource_path('fonts/Comfortaa-Bold.ttf');
-        $size = (int) round($r * 0.95);
+        // Same face + weight as the web/mail wordmark: Comfortaa 700, ink colour, green dot.
+        $size = (int) round($r * 1.08);
         $b = imagettfbbox($size, 0, $font, 'n');
         $w = $b[2] - $b[0];
         $h = $b[1] - $b[7];
         $tx = (int) ($cx - $w / 2 - $b[0] - $r * 0.06);
         $ty = (int) ($cy + $h / 2 - $b[1]);
-        imagettftext($im, $size, 0, $tx, $ty, imagecolorallocate($im, ...self::TO), $font, 'n');
-        $dot = max(3, (int) round($r * 0.26));
+        imagettftext($im, $size, 0, $tx, $ty, imagecolorallocate($im, 15, 23, 42), $font, 'n');
+        $dot = max(3, (int) round($size * 0.3));
         imagefilledellipse($im, $tx + $w + (int) ($dot * 0.9), $ty - (int) ($dot * 0.55), $dot, $dot, imagecolorallocate($im, ...self::FROM));
     }
 

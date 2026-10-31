@@ -1,5 +1,23 @@
 <?php
 
+/*
+ * MAIL_SCHEME arrives from Coolify / .env in many spellings. Symfony only
+ * understands "smtp" (plain/STARTTLS, e.g. port 587) and "smtps" (implicit
+ * TLS, port 465). A literal "null" string — which Coolify can pass through
+ * quoted — makes Symfony throw "The "null" scheme is not supported", which is
+ * what turned forgot-password into a 500. Normalise everything here.
+ */
+$neabyMailScheme = (static function ($raw) {
+    $v = strtolower(trim((string) $raw, " \t\n\r\0\x0B\"'"));
+
+    return match ($v) {
+        '', 'null', '(null)', 'none', 'false', 'auto' => null,
+        'tls', 'starttls', 'smtp' => 'smtp',
+        'ssl', 'smtps' => 'smtps',
+        default => null,
+    };
+})(env('MAIL_SCHEME'));
+
 return [
 
     /*
@@ -39,13 +57,13 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME'),
+            'scheme' => $neabyMailScheme,
             'url' => env('MAIL_URL'),
             'host' => env('MAIL_HOST', '127.0.0.1'),
-            'port' => env('MAIL_PORT', 2525),
+            'port' => (int) env('MAIL_PORT', 2525),
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
-            'timeout' => null,
+            'timeout' => (int) env('MAIL_TIMEOUT', 15),
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 

@@ -22,7 +22,7 @@ class ShareCards
         'landscape' => [1200, 630],
     ];
 
-    private const VERSION = 'v4';
+    private const VERSION = 'v5';
 
     public function __construct(private readonly QrCodes $qr) {}
 
@@ -144,25 +144,26 @@ class ShareCards
             if (! empty($d['badge'])) {
                 $this->pill($im, $iw - 28 - $this->pillWidth($d['badge'], 18), 28, $d['badge'], 18, '#ffffff', '#0f172a');
             }
-            // Right rail: QR tile, price, title.
-            $px = $iw + 20;
-            $pw = $W - $iw - 40;
+            // Right rail: QR tile, then (with generous breathing room) price, title, subtitle.
+            $px = $iw + 22;
+            $pw = $W - $iw - 44;
             $tile = $pw;
-            $this->qrTile($im, $d['url'], $px, 28, $tile);
-            $y = 28 + $tile + 40;
+            $stack = [];
             if (! empty($d['price'])) {
-                $size = $this->fit($d['price'], $bold, 30, $pw);
-                imagettftext($im, $size, 0, $px, $y, $green, $bold, $d['price']);
-                $y += 34;
+                $stack[] = [$d['price'], $this->fit($d['price'], $bold, 28, $pw), $bold, $green, 18];
             }
-            foreach ($this->wrap($d['title'], $med, 17, $pw, 3) as $line) {
-                imagettftext($im, 17, 0, $px, $y, $ink, $med, $line);
-                $y += 25;
+            foreach ($this->wrap($d['title'], $med, 15, $pw, 3) as $i => $line) {
+                $stack[] = [$line, 15, $med, $ink, 9];
             }
             if (! empty($d['subtitle'])) {
-                $sub = $this->wrap($d['subtitle'], $med, 14, $pw, 1)[0] ?? '';
-                imagettftext($im, 14, 0, $px, min($H - 24, $y + 8), $muted, $med, $sub);
+                $stack[count($stack) - 1][4] = 16;
+                $stack[] = [$this->wrap($d['subtitle'], $med, 12, $pw, 1)[0] ?? '', 12, $med, $muted, 0];
             }
+            $gapQr = 46; // clear space between the QR tile and the text below it
+            $blockH = $tile + $gapQr + $this->stackHeight($stack);
+            $top = max(28, (int) (($H - $blockH) / 2));
+            $this->qrTile($im, $d['url'], $px, $top, $tile);
+            $this->drawStack($im, $stack, $px, $top + $tile + $gapQr);
         } else {
             $ih = (int) round($H * 0.8);
             $this->drawCover($im, $d['image'], 0, 0, $W, $ih, $d['accent'], $d['title']);
@@ -177,34 +178,25 @@ class ShareCards
             $qy = $H - $pad + 8 - $tile;
             $this->qrTile($im, $d['url'], $qx, $qy, $tile);
 
-            $tw = $qx - $pad - 32;
-            $priceSize = $format === 'portrait' ? 54 : 46;
-            $titleSize = $format === 'portrait' ? 28 : 25;
-            $subSize = $format === 'portrait' ? 21 : 19;
+            $tw = $qx - $pad - 36;
+            $portrait = $format === 'portrait';
+            $priceSize = $portrait ? 46 : 38;
+            $titleSize = $portrait ? 22 : 19;
+            $subSize = $portrait ? 16 : 14;
             $hasPrice = ! empty($d['price']);
-            $titleLines = $this->wrap($d['title'], $hasPrice ? $med : $bold, $hasPrice ? $titleSize : $priceSize - 10, $tw, 1);
-            $blockH = ($hasPrice ? $priceSize + 18 : 0) + ($hasPrice ? $titleSize : $priceSize - 10) + 14 + $subSize;
-            $y = $ih + (int) (($band - $blockH) / 2);
+            $stack = [];
             if ($hasPrice) {
-                $y += $priceSize;
-                imagettftext($im, $priceSize, 0, $pad, $y, $green, $bold, $d['price']);
-                if (! empty($d['compare'])) {
-                    $box = imagettfbbox($priceSize, 0, $bold, $d['price']);
-                    $cx = $pad + ($box[2] - $box[0]) + 20;
-                    imagettftext($im, $subSize + 2, 0, $cx, $y, $this->color($im, '#94a3b8'), $med, $d['compare']);
-                    $cb = imagettfbbox($subSize + 2, 0, $med, $d['compare']);
-                    imagefilledrectangle($im, $cx, $y - (int) ($subSize * 0.38), $cx + ($cb[2] - $cb[0]), $y - (int) ($subSize * 0.38) + 2, $this->color($im, '#94a3b8'));
-                }
-                $y += 18;
+                $stack[] = [$d['price'], $this->fit($d['price'], $bold, $priceSize, (int) ($tw * 0.7)), $bold, $green, $portrait ? 24 : 18, $d['compare'] ?? null];
+                $stack[] = [$this->wrap($d['title'], $med, $titleSize, $tw, 1)[0] ?? '', $titleSize, $med, $ink, $portrait ? 16 : 13];
+            } else {
+                $ts = $priceSize - 12;
+                $stack[] = [$this->wrap($d['title'], $bold, $ts, $tw, 1)[0] ?? '', $ts, $bold, $ink, $portrait ? 20 : 16];
             }
-            $ts = $hasPrice ? $titleSize : $priceSize - 10;
-            $y += $ts;
-            imagettftext($im, $ts, 0, $pad, $y, $ink, $hasPrice ? $med : $bold, $titleLines[0] ?? '');
             if (! empty($d['subtitle'])) {
-                $y += 14 + $subSize;
-                $sub = $this->wrap($d['subtitle'], $med, $subSize, $tw, 1)[0] ?? '';
-                imagettftext($im, $subSize, 0, $pad, $y, $muted, $med, $sub);
+                $stack[] = [$this->wrap($d['subtitle'], $med, $subSize, $tw, 1)[0] ?? '', $subSize, $med, $muted, 0];
             }
+            $y = $ih + (int) (($band - $this->stackHeight($stack)) / 2);
+            $this->drawStack($im, $stack, $pad, $y, $subSize + 2);
         }
 
         ob_start();
@@ -249,11 +241,82 @@ class ShareCards
         return ($b[2] - $b[0]) + 44;
     }
 
+    /**
+     * Vertical text stack measured with real glyph metrics so lines never touch.
+     * Each row: [text, size, font, colour, gapAfter, ?strikethroughCompare].
+     */
+    private function stackHeight(array $rows): int
+    {
+        $h = 0;
+        foreach ($rows as $r) {
+            [$asc, $desc] = $this->metrics($r[1], $r[2]);
+            $h += $asc + $desc + $r[4];
+        }
+
+        return $h;
+    }
+
+    private function drawStack(\GdImage $im, array $rows, int $x, int $y, int $compareSize = 16): void
+    {
+        foreach ($rows as $r) {
+            [$asc, $desc] = $this->metrics($r[1], $r[2]);
+            $y += $asc;
+            $w = $this->text($im, $r[1], $x, $y, $r[3], $r[2], $r[0]);
+            if (! empty($r[5])) {
+                $grey = $this->color($im, '#94a3b8');
+                $med = $this->font('PlusJakartaSans-Medium');
+                $cx = $x + $w + 18;
+                $cw = $this->text($im, $compareSize, $cx, $y, $grey, $med, $r[5]);
+                $sy = $y - (int) round($compareSize * 0.5);
+                imagefilledrectangle($im, $cx, $sy, $cx + $cw, $sy + 2, $grey);
+            }
+            $y += $desc + $r[4];
+        }
+    }
+
+    /** Ascent/descent in px for a size, from the font's own "Hg" box. */
+    private function metrics(int $size, string $font): array
+    {
+        $b = imagettfbbox($size, 0, $font, 'Hgy₦');
+
+        return [max(1, -$b[7]), max(0, $b[1])];
+    }
+
+    /**
+     * Draws text, swapping every ₦ (U+20A6) to the bundled two-stroke Naira
+     * glyph (Inter, SIL OFL) — Plus Jakarta / Comfortaa only ship a single bar.
+     * Returns the advance width.
+     */
+    private function text(\GdImage $im, int $size, int $x, int $y, int $color, string $font, string $text): int
+    {
+        $naira = $this->font(str_contains($font, 'ExtraBold') ? 'Naira-ExtraBold' : 'Naira-Medium');
+        $cx = $x;
+        foreach (preg_split('/(₦)/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY) as $part) {
+            $f = $part === '₦' ? $naira : $font;
+            $b = imagettftext($im, $size, 0, $cx, $y, $color, $f, $part);
+            $cx = $b[2] + ($part === '₦' ? (int) round($size * 0.06) : 0);
+        }
+
+        return $cx - $x;
+    }
+
+    /** Width of text measured the same way text() draws it. */
+    private function textWidth(int $size, string $font, string $text): int
+    {
+        $naira = $this->font(str_contains($font, 'ExtraBold') ? 'Naira-ExtraBold' : 'Naira-Medium');
+        $w = 0;
+        foreach (preg_split('/(₦)/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY) as $part) {
+            $b = imagettfbbox($size, 0, $part === '₦' ? $naira : $font, $part);
+            $w += ($b[2] - $b[0]) + ($part === '₦' ? (int) round($size * 0.06) : 0);
+        }
+
+        return $w;
+    }
+
     private function fit(string $text, string $font, int $size, int $max): int
     {
         while ($size > 12) {
-            $b = imagettfbbox($size, 0, $font, $text);
-            if (($b[2] - $b[0]) <= $max) {
+            if ($this->textWidth($size, $font, $text) <= $max) {
                 break;
             }
             $size--;
@@ -315,7 +378,7 @@ class ShareCards
         imagefilledrectangle($im, $x + $r, $y, $x + $w - $r, $y + $h, $c);
         imagefilledellipse($im, $x + $r, $y + $r, $h, $h, $c);
         imagefilledellipse($im, $x + $w - $r, $y + $r, $h, $h, $c);
-        imagettftext($im, $size, 0, $x + 22, $y + $size + 14, $this->color($im, $fg), $font, $text);
+        $this->text($im, $size, $x + 22, $y + $size + 14, $this->color($im, $fg), $font, $text);
     }
 
     /** @return list<string> */
@@ -326,8 +389,7 @@ class ShareCards
         $cur = '';
         foreach ($words as $word) {
             $try = $cur === '' ? $word : "{$cur} {$word}";
-            $b = imagettfbbox($size, 0, $font, $try);
-            if (($b[2] - $b[0]) <= $max || $cur === '') {
+            if ($this->textWidth($size, $font, $try) <= $max || $cur === '') {
                 $cur = $try;
             } else {
                 $lines[] = $cur;
@@ -341,8 +403,7 @@ class ShareCards
             $lines = array_slice($lines, 0, $maxLines);
             $last = $lines[$maxLines - 1];
             while (mb_strlen($last) > 1) {
-                $b = imagettfbbox($size, 0, $font, $last.'…');
-                if (($b[2] - $b[0]) <= $max) {
+                if ($this->textWidth($size, $font, $last.'…') <= $max) {
                     break;
                 }
                 $last = mb_substr($last, 0, -1);
