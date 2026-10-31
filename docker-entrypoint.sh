@@ -35,6 +35,18 @@ if [ "${NEABY_SEED_CATEGORIES:-true}" = "true" ]; then
   php artisan db:seed --class='Database\Seeders\MembershipPlanSeeder' --force
 fi
 
+# Demo data toggle — NEABY_SEED_DEMO=true seeds the demo cast once (idempotent),
+# NEABY_SEED_DEMO=wipe removes it, anything else leaves data alone.
+# Safe if the demo files were deleted from the repo (command won't exist → skipped).
+if [ -f app/Console/Commands/NeabyDemoCommand.php ]; then
+  case "${NEABY_SEED_DEMO:-false}" in
+    true|1|yes|on|seed|wipe|remove)
+      echo "[neaby] demo data: NEABY_SEED_DEMO=${NEABY_SEED_DEMO}"
+      php artisan neaby:demo boot || echo "[neaby] demo data step failed — continuing boot" >&2
+      ;;
+  esac
+fi
+
 echo "[neaby] caching config/routes/views"
 php artisan optimize:clear >/dev/null 2>&1 || true
 php artisan optimize

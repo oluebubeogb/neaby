@@ -10,8 +10,9 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([CategorySeeder::class, MembershipPlanSeeder::class]);
 
-        if (! app()->isProduction()) {
-            $this->call([DemoSeeder::class, DemoMembershipSeeder::class]);
+        // Demo cast (neaby1@beuden.com.ng …). Optional: delete NeabyDemoSeeder.php and this stays valid.
+        if (! app()->isProduction() && class_exists(NeabyDemoSeeder::class)) {
+            $this->call(NeabyDemoSeeder::class);
         }
     }
 }

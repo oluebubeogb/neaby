@@ -44,7 +44,7 @@ app/
   Support/              Present (Inertia DTOs), Seo, Admin, Username, NigeriaStates
 config/neaby.php        admins, moderation, uploads, AI    config/payments.php  providers
 database/migrations     users/stores/products/images/categories + tsvector/GIN/trigram indexes
-database/seeders        CategorySeeder (16 categories, idempotent), DemoSeeder (4 demo sellers)
+database/seeders        CategorySeeder (16 categories, idempotent), NeabyDemoSeeder (optional demo cast — see “Demo data”)
 resources/js/
   Layouts/AppShell.vue  responsive shell: bottom nav (mobile) · 76px rail (tablet) ·
                         248px ⇄ 76px collapsible sidebar (desktop)
@@ -132,14 +132,14 @@ cp .env.example .env
 #   ADMIN_USERNAMES=ada
 composer install
 php artisan key:generate
-php artisan migrate --seed              # categories + demo sellers (password: "password")
+php artisan migrate --seed              # categories + plans + demo cast (non-production only)
 php artisan storage:link
 npm ci
 npm run dev                             # or: npm run build
 php artisan serve                       # http://127.0.0.1:8000
 ```
 
-Demo accounts (DemoSeeder): `ada`, `tunde`, `chioma`, `musa` — all with password `password`.
+Demo accounts: `neaby1@beuden.com.ng` … `neaby20@beuden.com.ng` — each password is the email itself (see “Demo data”).
 No Redis locally? Set `CACHE_STORE=database`; `/api/health` will report Redis as down.
 
 ---
@@ -211,6 +211,7 @@ and `php artisan storage:link`. Uploads up to 100 MB per request are allowed by 
 | `ADMIN_USERNAMES` | | `ada,tunde` | Comma-separated admin usernames |
 | `NEABY_REQUIRE_PRODUCT_REVIEW` | | `false` | `true` = new listings wait in `pending` |
 | `NEABY_SEED_CATEGORIES` | | `true` | Seed default categories on boot |
+| `NEABY_SEED_DEMO` | | `false` | `true` = seed the demo cast on boot (once, idempotent) · `wipe` = remove it on boot · `false` = leave data alone |
 | `LISTING_AI_DRIVER` | | `fake` | `fake` (offline) · `openai` · `null` |
 | `LISTING_AI_BASE_URL` `LISTING_AI_API_KEY` `LISTING_AI_MODEL` | | | Only for `openai` (any OpenAI-compatible API) |
 | `PAYMENT_PROVIDER` | | `fake` | `fake` · `monnify` (see below) |
@@ -253,8 +254,73 @@ and `php artisan storage:link`. Uploads up to 100 MB per request are allowed by 
 
 ## Demo data
 
-`php artisan db:seed` creates `ada` (admin, seller), `tunde`, `chioma` and `musa` — all with password `password` —
-plus categories, membership plans (reseller monthly/yearly, supplier resale monthly/yearly, seller pro) and demo listings/offers.
+A self-contained demo cast so you can preview every part of neaby. **It never calls Listing AI / OpenAI**
+(the seeder forces the offline `FakeListingAi`, so no API credits are used) and **sends no email**
+(inbox notices are written straight to the database).
+
+### Turn it on / off — one switch
+
+| How | On | Off |
+| --- | --- | --- |
+| Coolify env (redeploy) | `NEABY_SEED_DEMO=true` | `NEABY_SEED_DEMO=wipe` (removes it), then set `false` |
+| Artisan (Coolify terminal / local) | `php artisan neaby:demo seed` | `php artisan neaby:demo wipe` |
+
+- `php artisan neaby:demo seed --fresh` — wipe and rebuild the demo.
+- `php artisan neaby:demo status` — shows whether the demo is present.
+- Seeding is idempotent: if `neaby1@beuden.com.ng` already exists it does nothing.
+- Wipe deletes **only** demo accounts (`neabyN@beuden.com.ng`, plus legacy `*@neaby.test`) and everything they own
+  (stores, products, photos, orders, payments, memberships, carts, saves, events, inbox). Real users are untouched.
+  Note: an order a real user placed in a demo store is deleted with that store.
+- `php artisan migrate --seed` also adds it, but only outside `APP_ENV=production`.
+
+### Logins — the password is the email address
+
+Every demo email is verified. Example: email `neaby1@beuden.com.ng`, password `neaby1@beuden.com.ng`.
+
+| Email (= password) | Name | City | Role in the demo |
+| --- | --- | --- | --- |
+| `neaby1@beuden.com.ng` | Adaeze Okonkwo | Yaba, Lagos | Admin · Adaeze Styles (Fashion) · Seller Pro |
+| `neaby2@beuden.com.ng` | Tunde Bakare | Ikeja, Lagos | Gadget Hub NG (Phones) · resale supplier (yearly) |
+| `neaby3@beuden.com.ng` | Chioma Eze | Enugu | Glow by Chi (Beauty) · reseller (monthly) |
+| `neaby4@beuden.com.ng` | Musa Ibrahim | Wuse, Abuja | Abuja Home Goods (Home & Kitchen) |
+| `neaby5@beuden.com.ng` | Emeka Nwosu | Onitsha, Anambra | Emeka Kicks (Shoes & Bags) |
+| `neaby6@beuden.com.ng` | Folake Adeyemi | Bodija, Ibadan | Folake Hair Studio (Hair & Wigs) · CSV import |
+| `neaby7@beuden.com.ng` | Ibrahim Danjuma | Kano | Kano Fresh Foods (Food & Groceries) |
+| `neaby8@beuden.com.ng` | Ngozi Obi | Port Harcourt | Little Steps Kids (Baby & Kids) |
+| `neaby9@beuden.com.ng` | Yetunde Ogunleye | Abeokuta | Wellness by Yetty (Health) |
+| `neaby10@beuden.com.ng` | Segun Adebayo | Lekki, Lagos | FitLife Gear (Sports) · Seller Pro |
+| `neaby11@beuden.com.ng` | Halima Bello | Kaduna | Halima Gold & Time (Jewellery) |
+| `neaby12@beuden.com.ng` | Kelechi Amadi | Owerri | Kelechi Art House (Art & Crafts) |
+| `neaby13@beuden.com.ng` | Bisi Alabi | Ilorin | Bisi Books & More (Books) |
+| `neaby14@beuden.com.ng` | Uche Okeke | Ladipo, Lagos | Uche Auto Spares (Vehicles & Parts) |
+| `neaby15@beuden.com.ng` | Damilola Ojo | Surulere, Lagos | Dami Fixes (Services) |
+| `neaby16@beuden.com.ng` | Obinna Chukwu | Computer Village, Ikeja | Obinna Tech World (Electronics) · resale supplier |
+| `neaby17@beuden.com.ng` | Aisha Mohammed | Garki, Abuja | Reseller (yearly) + buyer |
+| `neaby18@beuden.com.ng` | Funmilayo Lawal | Ikorodu, Lagos | Reseller (monthly, referred by Chioma) + buyer |
+| `neaby19@beuden.com.ng` | Chinedu Okafor | Benin City | Buyer |
+| `neaby20@beuden.com.ng` | Zainab Yusuf | Jos | Buyer |
+
+### What gets seeded
+
+- 16 stores (one per category), 64 products in all 16 categories, with generated “DEMO PHOTO” images (offline, GD).
+- Memberships with paid (fake-provider) payments and entitlements: resale suppliers, resellers, Seller Pro.
+- Resale: supplier products open for resale, 6 reseller offers, a referral, supplier requests in every status
+  (sent → availability confirmed → terms proposed → accepted → fulfilled, and cancelled).
+- 15 orders across every status (paid, processing, ready for pickup, shipped, delivered, completed, cancelled,
+  refunded with a refund record, payment failed), with payment transactions.
+- Carts, saved items, product views, shares, QR/share visits, enquiries and card downloads (insights have data).
+- Sponsored placements (3 active, 1 ended), a completed CSV import batch with a failed row.
+- Inbox: welcome, order, resale, membership, sponsored, import, store tips and admin notices — read and unread.
+
+### Removing the demo for good (before real use)
+
+1. Run `php artisan neaby:demo wipe` (or deploy once with `NEABY_SEED_DEMO=wipe`).
+2. Delete these files from GitHub:
+   - `database/seeders/NeabyDemoSeeder.php`
+   - `app/Console/Commands/NeabyDemoCommand.php`
+3. Optional tidy-up (harmless if left — they skip themselves when the files above are gone):
+   the `NEABY_SEED_DEMO` block in `docker-entrypoint.sh`, the `NeabyDemoSeeder` lines in
+   `database/seeders/DatabaseSeeder.php`, the `NEABY_SEED_DEMO` lines in `.env.example`, and this README section.
 
 ## Checks
 
