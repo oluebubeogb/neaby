@@ -19,6 +19,8 @@ class ConfirmAccountDeletion extends Notification
     {
         return (new MailMessage)
             ->subject('Confirm account deletion · neaby')
+            ->markdown('notifications::email', ['kicker' => 'security'])
+            ->error()
             ->greeting('Hi '.($notifiable->name ?: $notifiable->username).',')
             ->line('We received a request to permanently delete your neaby account, your store and listings.')
             ->action('Confirm deletion', $this->url)

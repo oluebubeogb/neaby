@@ -1,17 +1,16 @@
-<x-mail::message>
-{{-- Greeting --}}
+<x-mail::message :kicker="$kicker ?? null">
+{{-- Greeting — bold, body-sized (the "post" opener) --}}
 @if (! empty($greeting))
-# {{ $greeting }}
+<p style="font-size: 15px; font-weight: 700; color: #141a17; margin: 0 0 4px;">{{ $greeting }}</p>
 @elseif ($level === 'error')
-# Something needs your attention
+<p style="font-size: 15px; font-weight: 700; color: #141a17; margin: 0 0 4px;">Something needs your attention</p>
 @else
-# Hello from neaby
+<p style="font-size: 15px; font-weight: 700; color: #141a17; margin: 0 0 4px;">Hey 👋</p>
 @endif
 
 {{-- Intro Lines --}}
 @foreach ($introLines as $line)
-{{ $line }}
-
+<p style="font-size: 15px; color: #36423c; margin: 0 0 12px;">{{ $line }}</p>
 @endforeach
 
 {{-- Action Button --}}
@@ -21,24 +20,23 @@
 </x-mail::button>
 @endisset
 
-{{-- Outro Lines --}}
+{{-- Outro Lines — same size, quieter colour --}}
 @foreach ($outroLines as $line)
-<p style="font-size: 13px; color: #64748b;">{{ $line }}</p>
-
+<p style="font-size: 14px; color: #67766e; margin: 0 0 8px;">{{ $line }}</p>
 @endforeach
 
 {{-- Salutation --}}
 @if (! empty($salutation))
-<p style="margin-top: 22px; color: #0f172a; font-weight: 600;">{{ $salutation }}</p>
+<p style="font-size: 15px; margin: 16px 0 0; color: #141a17; font-weight: 600;">{{ $salutation }}</p>
 @else
-<p style="margin-top: 22px; color: #0f172a; font-weight: 600;">— The <span class="neaby-wordmark" style="font-family: 'Comfortaa', 'Trebuchet MS', Arial, sans-serif; font-weight: 700;">neaby</span> team</p>
+<p style="font-size: 15px; margin: 16px 0 0; color: #141a17; font-weight: 600;">— the <span class="neaby-wordmark" style="font-family: 'Comfortaa', 'Trebuchet MS', Arial, sans-serif; font-weight: 700; letter-spacing: -0.3px;">neaby</span> team</p>
 @endif
 
 {{-- Subcopy --}}
 @isset($actionText)
 <x-slot:subcopy>
-Button not working? Paste this link into your browser:
-<span class="break-all">[{{ $displayableActionUrl }}]({{ $actionUrl }})</span>
+Button not working? Paste this into your browser:<br>
+<a href="{{ $actionUrl }}" class="link break-all" style="color: #4b5952; font-weight: 500; word-break: break-all;">{{ $displayableActionUrl }}</a>
 </x-slot:subcopy>
 @endisset
 </x-mail::message>

@@ -1,21 +1,15 @@
 @props([
     'url',
     'color' => 'primary',
-    'align' => 'center',
+    'align' => 'left',
 ])
 <table class="action" align="{{ $align }}" width="100%" cellpadding="0" cellspacing="0" role="presentation">
-<tr>
-<td align="{{ $align }}">
-<table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation">
 <tr>
 <td align="{{ $align }}">
 <table border="0" cellpadding="0" cellspacing="0" role="presentation">
 <tr>
 <td>
-<a href="{{ $url }}" class="button button-{{ $color }}" target="_blank" rel="noopener">{!! $slot !!}</a>
-</td>
-</tr>
-</table>
+<a href="{{ $url }}" class="button button-{{ $color }}" target="_blank" rel="noopener">{!! $slot !!}<span style="font-weight: 500; opacity: .85;">&nbsp;&nbsp;&rarr;</span></a>
 </td>
 </tr>
 </table>

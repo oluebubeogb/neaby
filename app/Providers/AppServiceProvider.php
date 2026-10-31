@@ -57,11 +57,12 @@ class AppServiceProvider extends ServiceProvider
         // neither notification is queued — so no worker is needed for them).
         \Illuminate\Auth\Notifications\VerifyEmail::toMailUsing(fn ($user, string $url) => (new \Illuminate\Notifications\Messages\MailMessage)
             ->subject('Verify your email · neaby')
+            ->markdown('notifications::email', ['kicker' => 'welcome'])
             ->greeting('Welcome to neaby, '.($user->name ?: $user->username).' 👋')
-            ->line('Confirm this is your email so buyers and sellers nearby know you\'re real.')
+            ->line('One tap to confirm this is your email — it lets buyers and sellers nearby know you\'re real.')
             ->action('Verify email', $url)
             ->line('This link expires in '.config('auth.verification.expire', 60).' minutes.')
-            ->salutation('— The neaby team'));
+        );
 
         \Illuminate\Auth\Notifications\ResetPassword::toMailUsing(function ($user, string $token) {
             $url = route('password.reset', ['token' => $token, 'email' => $user->getEmailForPasswordReset()]);
@@ -69,11 +70,11 @@ class AppServiceProvider extends ServiceProvider
 
             return (new \Illuminate\Notifications\Messages\MailMessage)
                 ->subject('Reset your password · neaby')
+                ->markdown('notifications::email', ['kicker' => 'security'])
                 ->greeting('Hi '.($user->name ?: $user->username).',')
                 ->line('Someone (hopefully you) asked to reset your neaby password.')
                 ->action('Choose a new password', $url)
-                ->line("This link expires in {$minutes} minutes. If you didn't ask for it, you can safely ignore this email.")
-                ->salutation('— The neaby team');
+                ->line("This link expires in {$minutes} minutes. If you didn't ask for it, you can safely ignore this email.");
         });
 
         Gate::define('admin', fn (User $user) => $user->isAdmin());

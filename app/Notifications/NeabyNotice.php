@@ -31,9 +31,18 @@ class NeabyNotice extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
+        $kicker = match ($this->kind) {
+            'order' => 'order update',
+            'membership' => 'membership',
+            'resale' => 'resale',
+            'sponsored' => 'sponsored',
+            default => 'notification',
+        };
+
         $m = (new MailMessage)->subject($this->title.' · neaby')
-            ->greeting('Hi '.(($notifiable->name ?? null) ?: ($notifiable->username ?? null) ?: 'there').',')
-            ->line($this->body);
+            ->markdown('notifications::email', ['kicker' => $kicker])
+            ->greeting($this->title)
+            ->line('Hi '.(($notifiable->name ?? null) ?: ($notifiable->username ?? null) ?: 'there').' — '.$this->body);
         if ($this->url) {
             $m->action('Open neaby', $this->url);
         }
