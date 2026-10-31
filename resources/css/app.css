@@ -1,0 +1,129 @@
+/* Self-hosted variable fonts (no third-party font CDNs). */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/plus-jakarta-sans';
+
+/* Brand wordmark font: Comfortaa 700, self-hosted from /public/fonts (SIL OFL 1.1). */
+@font-face {
+    font-family: 'Comfortaa';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/comfortaa-700.woff2') format('woff2');
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --nav-rail: 76px;
+        --nav-sidebar: 248px;
+        --safe-bottom: env(safe-area-inset-bottom, 0px);
+        --safe-top: env(safe-area-inset-top, 0px);
+        color-scheme: light;
+    }
+    html {
+        -webkit-tap-highlight-color: transparent;
+        text-rendering: optimizeLegibility;
+    }
+    body {
+        @apply bg-ink-50 font-sans text-ink-900 antialiased;
+    }
+    h1, h2, h3 {
+        @apply font-display tracking-tight;
+    }
+    :focus-visible {
+        @apply outline-none ring-2 ring-brand-400 ring-offset-2 ring-offset-white;
+    }
+    [x-cloak], [v-cloak] { display: none !important; }
+}
+
+@layer components {
+    /* Any inline lowercase neaby wordmark outside the Wordmark component. */
+    .brand-mark {
+        @apply font-brand font-bold lowercase tracking-[-0.03em];
+    }
+
+    .surface {
+        @apply rounded-3xl border border-ink-200/70 bg-white shadow-soft;
+    }
+    .glass {
+        @apply border-white/60 bg-white/75 backdrop-blur-xl backdrop-saturate-150;
+    }
+    .btn {
+        @apply inline-flex select-none items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition duration-150 active:scale-[.98] disabled:pointer-events-none disabled:opacity-50;
+    }
+    .btn-primary {
+        @apply btn bg-brand-500 text-white shadow-glow hover:bg-brand-600;
+    }
+    .btn-dark {
+        @apply btn bg-ink-900 text-white hover:bg-ink-800;
+    }
+    .btn-soft {
+        @apply btn bg-brand-50 text-brand-700 hover:bg-brand-100;
+    }
+    .btn-ghost {
+        @apply btn border border-ink-200 bg-white text-ink-700 hover:border-ink-300 hover:bg-ink-50;
+    }
+    .btn-danger {
+        @apply btn bg-red-50 text-red-700 hover:bg-red-100;
+    }
+    .btn-lg { @apply rounded-2xl px-5 py-3 text-base; }
+    .btn-sm { @apply rounded-xl px-3 py-1.5 text-xs; }
+    .icon-btn {
+        @apply inline-flex h-10 w-10 items-center justify-center rounded-full text-ink-600 transition hover:bg-ink-100 hover:text-ink-900 active:scale-95;
+    }
+    .input {
+        @apply block w-full rounded-2xl border-ink-200 bg-white px-4 py-3 text-[15px] text-ink-900 shadow-sm placeholder:text-ink-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-100;
+    }
+    .label {
+        @apply mb-1.5 block text-sm font-semibold text-ink-700;
+    }
+    .hint { @apply mt-1.5 text-xs text-ink-500; }
+    .chip {
+        @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-ink-200 bg-white px-3.5 py-2 text-sm font-medium text-ink-700 transition hover:border-ink-300;
+    }
+    .chip-active {
+        @apply border-ink-900 bg-ink-900 text-white hover:border-ink-900;
+    }
+    .badge {
+        @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide;
+    }
+    .section-title {
+        @apply font-display text-lg font-bold text-ink-900 md:text-xl;
+    }
+    .no-scrollbar { scrollbar-width: none; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .menu-item { @apply flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left font-medium text-ink-700 transition hover:bg-ink-50 hover:text-ink-900; }
+    .pb-safe { padding-bottom: calc(var(--safe-bottom) + 0.5rem); }
+    .pt-safe { padding-top: var(--safe-top); }
+
+    /* Ambient gradient field — lively but slow, behind content. */
+    .ambient {
+        @apply pointer-events-none fixed inset-0 -z-10 overflow-hidden;
+    }
+    .ambient::before, .ambient::after {
+        content: '';
+        @apply absolute rounded-full opacity-60 blur-3xl;
+    }
+    .ambient::before {
+        width: 46rem; height: 46rem; top: -18rem; right: -14rem;
+        background: radial-gradient(closest-side, rgba(56, 204, 131, .28), transparent);
+        @apply animate-drift;
+    }
+    .ambient::after {
+        width: 40rem; height: 40rem; bottom: -20rem; left: -12rem;
+        background: radial-gradient(closest-side, rgba(45, 212, 191, .18), rgba(250, 204, 21, .06) 60%, transparent);
+        @apply animate-drift-alt;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

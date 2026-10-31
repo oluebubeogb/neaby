@@ -1,0 +1,7 @@
+#!/command/with-contenv sh
+# neaby scheduler (reservation release, membership expiry sweep, quality scores).
+# Disable with NEABY_RUN_WORKERS=false (e.g. if you use a Coolify Scheduled Task instead).
+if [ "${NEABY_RUN_WORKERS:-true}" != "true" ]; then exec sleep infinity; fi
+sleep "${NEABY_WORKER_START_DELAY:-20}"
+cd /var/www/html
+exec php artisan schedule:work
