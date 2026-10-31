@@ -25,9 +25,12 @@ class HandleInertiaRequests extends Middleware
             ],
             'counts' => fn () => $request->user() ? [
                 'cart' => (int) \App\Models\CartItem::query()->whereHas('cart', fn ($q) => $q->where('user_id', $request->user()->id))->sum('quantity'),
+                // product_id → quantity in cart, so product cards / immersive / product page can show "in cart ×n".
+                'cart_items' => (object) \App\Models\CartItem::query()->whereHas('cart', fn ($q) => $q->where('user_id', $request->user()->id))
+                    ->selectRaw('product_id, SUM(quantity) as qty')->groupBy('product_id')->pluck('qty', 'product_id')->map(fn ($q) => (int) $q)->all(),
                 'unread' => $request->user()->unreadNotifications()->count(),
                 'messages' => config('neaby.messaging.enabled', true) ? \App\Models\Conversation::unreadCount($request->user()) : 0,
-            ] : ['cart' => 0, 'unread' => 0, 'messages' => 0],
+            ] : ['cart' => 0, 'cart_items' => (object) [], 'unread' => 0, 'messages' => 0],
             // Messaging / calls: ICE servers only for signed-in users (TURN creds never go to guests).
             'rtc' => fn () => $request->user() && config('neaby.messaging.enabled', true) ? [
                 'messaging' => true,

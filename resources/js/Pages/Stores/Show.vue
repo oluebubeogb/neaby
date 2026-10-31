@@ -46,7 +46,7 @@ function share() { sharing.value = true; }
                 <span>Joined {{ store.joined }}</span>
             </template>
             <template #description>
-                <p v-if="store.description" class="mt-1 line-clamp-4 max-w-2xl whitespace-pre-line text-[13.5px] leading-relaxed text-ink-600">{{ store.description }}</p>
+                <p v-if="store.description" class="mt-1 line-clamp-4 max-w-3xl whitespace-pre-line text-[13.5px] leading-relaxed text-ink-600">{{ store.description }}</p>
             </template>
         </ProfileHero>
 

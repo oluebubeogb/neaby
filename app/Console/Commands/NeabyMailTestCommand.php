@@ -26,10 +26,30 @@ class NeabyMailTestCommand extends Command
             ['password', empty($smtp['password']) ? '(empty)' : '(set, hidden)'],
             ['from', config('mail.from.address').' / '.config('mail.from.name')],
             ['timeout', $smtp['timeout'] ?? ''],
+            ['ipv4 first', ($smtp['prefer_ipv4'] ?? true) ? 'yes → '.(\App\Mail\NeabySmtpTransportFactory::ipv4For((string) ($smtp['host'] ?? '')) ?? '(no A record / is IP)') : 'no'],
         ]);
 
+        // Raw reachability check (what Paddy's logs would show as ECONNREFUSED / ETIMEDOUT).
+        if (config('mail.default') === 'smtp' && ! empty($smtp['host'])) {
+            $ip = \App\Mail\NeabySmtpTransportFactory::ipv4For((string) $smtp['host']) ?? $smtp['host'];
+            $t = microtime(true);
+            $fp = @fsockopen(($smtp['scheme'] === 'smtps' ? 'ssl://' : '').$ip, (int) $smtp['port'], $errno, $errstr, 10);
+            if ($fp) {
+                stream_set_timeout($fp, 10);
+                $greet = trim((string) fgets($fp, 512));
+                fclose($fp);
+                $this->line(sprintf('TCP %s:%s ok in %dms — greeting: %s', $ip, $smtp['port'], (microtime(true) - $t) * 1000, $greet ?: '(none)'));
+            } else {
+                $this->warn("TCP {$ip}:{$smtp['port']} failed: [{$errno}] {$errstr} — check host/port, firewall, or that the VPS allows outbound SMTP.");
+            }
+        }
+
         try {
-            Notification::route('mail', $this->argument('to'))->notifyNow(
+            // Force the raw 'mail' channel. (AnonymousNotifiable::notifyNow() drops the
+            // channel list, and NeabyNotice::via() skips mail for a notifiable
+            // without ->email — so the old call reported "Sent" without sending.)
+            Notification::sendNow(
+                Notification::route('mail', $this->argument('to')),
                 new NeabyNotice('Test email', 'If you can read this, neaby mail is working. ₦ sign check: ₦7,500.', url('/home'), 'info'),
                 ['mail']
             );

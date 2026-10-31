@@ -1,8 +1,8 @@
 <script setup>
 /**
  * Shared hero for /s/{store} and /u/{user}. The avatar overlaps the cover (stacked above
- * it via z-index); name + handle and description + location sit in two columns
- * on wide screens (centre divider) and stack on mobile.
+ * it via z-index); name + handle and description + meta use an adaptive grid: stacked
+ * on mobile, content-sized name column + fluid description column from md up.
  */
 import Avatar from '@/Components/Avatar.vue';
 
@@ -40,17 +40,19 @@ defineProps({
                 </div>
             </div>
 
-            <!-- Info row: two columns with a centre divider on wide screens, stacked on mobile. -->
-            <div class="mt-3 grid min-w-0 gap-3 md:mt-4 md:grid-cols-2 md:gap-0 md:divide-x md:divide-ink-100">
-                <div class="min-w-0 md:pr-6">
+            <!-- Info row: adaptive grid. Stacked on mobile; from md the name column shrinks to fit
+                 its content (capped so a long name wraps), and the description takes all of the
+                 remaining width — no fixed 50/50 split, so there's no dead gap between them. -->
+            <div class="profile-info mt-3 grid min-w-0 gap-x-6 gap-y-2.5 md:mt-4 md:items-start">
+                <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <h1 class="font-display text-xl font-extrabold leading-tight tracking-tight text-ink-900 md:text-[1.4rem]">{{ name }}</h1>
+                        <h1 class="break-words font-display text-xl font-extrabold leading-tight tracking-tight text-ink-900 md:text-[1.4rem]">{{ name }}</h1>
                         <slot name="badge" />
                     </div>
-                    <div v-if="handle" class="mt-0.5 text-[13px] font-medium text-ink-500">{{ handle }}</div>
+                    <div v-if="handle" class="mt-0.5 truncate text-[13px] font-medium text-ink-500">{{ handle }}</div>
                 </div>
-                <div class="min-w-0 md:pl-6">
-                    <p v-if="tagline" class="max-w-2xl text-[14px] font-medium leading-relaxed text-ink-800">{{ tagline }}</p>
+                <div class="min-w-0 md:border-l md:border-ink-100 md:pl-6">
+                    <p v-if="tagline" class="max-w-3xl text-[14px] font-medium leading-relaxed text-ink-800">{{ tagline }}</p>
                     <slot name="description" />
                     <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ink-500">
                         <slot name="meta" />
@@ -61,3 +63,13 @@ defineProps({
         </div>
     </section>
 </template>
+
+<style scoped>
+.profile-info { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 768px) {
+    .profile-info { grid-template-columns: fit-content(16rem) minmax(0, 1fr); }
+}
+@media (min-width: 1024px) {
+    .profile-info { grid-template-columns: fit-content(22rem) minmax(0, 1fr); }
+}
+</style>

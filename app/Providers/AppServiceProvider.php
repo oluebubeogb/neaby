@@ -45,6 +45,9 @@ class AppServiceProvider extends ServiceProvider
     {
         Vite::prefetch(concurrency: 3);
 
+        // SMTP the Paddy way: IPv4-first connect + port-driven TLS (see class doc).
+        \Illuminate\Support\Facades\Mail::extend('smtp', fn (array $config) => \App\Mail\NeabySmtpTransportFactory::make($config));
+
         // Behind Coolify/Traefik TLS: generate https URLs when APP_URL is https.
         if (str_starts_with((string) config('app.url'), 'https://')) {
             URL::forceScheme('https');

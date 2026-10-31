@@ -1,13 +1,15 @@
 <script setup>
 import { Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
-import { BadgeCheck, Eye, ImageOff, Info, Maximize2, MapPin, Package, Pencil, Repeat2, Share2, ShieldCheck, Sparkles, Store, Truck, Zap } from 'lucide-vue-next';
+import { computed, nextTick, ref } from 'vue';
+import { BadgeCheck, Check, Eye, ImageOff, Info, Maximize2, MapPin, Package, Pencil, Repeat2, Share2, ShieldCheck, Sparkles, Store, Truck, Zap } from 'lucide-vue-next';
 import Tip from '@/Components/Tip.vue';
 import ReachOut from '@/Components/ReachOut.vue';
 import QtyStepper from '@/Components/QtyStepper.vue';
 import OptionPicker from '@/Components/OptionPicker.vue';
 import ImmersiveViewer from '@/Components/ImmersiveViewer.vue';
 import CartIcon from '@/Components/icons/CartIcon.vue';
+import CartPill from '@/Components/CartPill.vue';
+import { cartAdded, flyToCart } from '@/composables/cartFx';
 import WhatsAppLine from '@/Components/icons/WhatsAppLine.vue';
 import { requireLogin } from '@/composables/auth';
 import { waLink as wa } from '@/composables/wa';
@@ -29,13 +31,31 @@ const productOptions = computed(() => props.product.options || []);
 const chosen = ref({});
 const optionError = ref(null);
 const cartError = computed(() => page.props.errors?.quantity || page.props.errors?.options || null);
+const inCart = computed(() => Number(page.props.counts?.cart_items?.[props.product.id] || 0));
+const justAdded = ref(false);
+const addedQty = ref(0);
+const cartBtn = ref(null);
+let addedT = null;
 function addToCart(buyNow = false) {
     if (!signedIn.value) return requireLogin();
     const missing = productOptions.value.find((o) => !chosen.value[o.name]);
     if (missing) { optionError.value = `Choose a ${missing.name.toLowerCase()} first.`; return; }
     optionError.value = null;
     busy.value = true;
-    router.post(route('cart.add', props.product.id), { quantity: Math.min(qty.value, maxQty.value), buy_now: buyNow ? 1 : 0, options: productOptions.value.length ? chosen.value : null }, { preserveScroll: true, onFinish: () => (busy.value = false) });
+    const n = Math.min(qty.value, maxQty.value);
+    router.post(route('cart.add', props.product.id), { quantity: n, buy_now: buyNow ? 1 : 0, options: productOptions.value.length ? chosen.value : null }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            if (buyNow) return;
+            nextTick(() => flyToCart(cartBtn.value, images.value[0]?.url));
+            cartAdded(n);
+            addedQty.value = n;
+            justAdded.value = true;
+            clearTimeout(addedT);
+            addedT = setTimeout(() => (justAdded.value = false), 1800);
+        },
+        onFinish: () => (busy.value = false),
+    });
 }
 const immersive = ref(false);
 const immersiveItems = computed(() => [
@@ -151,8 +171,14 @@ const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 te
                         <QtyStepper v-model="qty" :max="maxQty" :disabled="busy" />
                         <span class="text-xs text-ink-400">{{ maxQty }} in stock</span>
                         <div class="ml-auto flex items-center gap-2">
-                            <Tip label="Add to cart">
-                                <button class="icon-btn-lg" :disabled="busy" aria-label="Add to cart" @click="addToCart(false)"><CartIcon :size="20" /></button>
+                            <Tip :label="inCart ? `Add another (${inCart} in cart)` : 'Add to cart'">
+                                <button ref="cartBtn" class="icon-btn-lg relative transition" :class="justAdded ? 'scale-110 border-brand-400 bg-brand-50 text-brand-700 ring-4 ring-brand-200' : ''" :disabled="busy" aria-label="Add to cart" @click="addToCart(false)">
+                                    <Transition mode="out-in" enter-from-class="scale-50 opacity-0" leave-to-class="scale-50 opacity-0" enter-active-class="transition duration-200" leave-active-class="transition duration-150">
+                                        <Check v-if="justAdded" key="ok" :size="20" :stroke-width="3" />
+                                        <CartIcon v-else key="cart" :size="20" />
+                                    </Transition>
+                                    <span v-if="inCart" class="absolute -right-1.5 -top-1.5 min-w-[20px] rounded-full bg-brand-600 px-1 text-center text-[11px] font-extrabold leading-5 text-white ring-2 ring-white">{{ inCart }}</span>
+                                </button>
                             </Tip>
                             <Tip label="Buy now">
                                 <button class="icon-btn-dark w-14" :disabled="busy" aria-label="Buy now" @click="addToCart(true)"><Zap :size="19" /></button>
@@ -160,6 +186,20 @@ const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 te
                         </div>
                     </div>
                     <p v-if="cartError" class="mt-2 text-xs font-medium text-red-600">{{ cartError }}</p>
+                    <!-- In-cart ribbon: appears once this item is in the cart, pops on every add -->
+                    <Transition enter-from-class="opacity-0 -translate-y-1 scale-[.98]" enter-active-class="transition duration-300 ease-out" leave-to-class="opacity-0" leave-active-class="transition duration-150">
+                        <div v-if="inCart" class="in-cart-ribbon mt-4 flex items-center gap-3 rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-50 to-white p-2.5 pl-3" :class="{ 'is-popping': justAdded }">
+                            <span class="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500 text-white shadow-[0_6px_16px_-6px_rgba(22,178,106,.8)]">
+                                <Check :size="17" :stroke-width="3" />
+                                <span v-if="justAdded" class="absolute inset-0 animate-ping rounded-full bg-brand-400/60" />
+                            </span>
+                            <div class="min-w-0 flex-1 text-[13px] leading-tight">
+                                <div class="font-bold text-ink-900">{{ justAdded ? `Added ${addedQty > 1 ? addedQty + ' ' : ''}to your cart` : 'In your cart' }} <span class="font-extrabold text-brand-700">×{{ inCart }}</span></div>
+                                <div class="text-ink-500">{{ page.props.counts?.cart || inCart }} item{{ (page.props.counts?.cart || inCart) === 1 ? '' : 's' }} in cart · ready when you are</div>
+                            </div>
+                            <CartPill label class="shrink-0" />
+                        </div>
+                    </Transition>
                 </div>
                 <div class="mt-3 flex flex-wrap items-center gap-2">
                     <Link v-if="isOwner" :href="route('sell.products.edit', product.id)" class="btn-dark btn-lg flex-1"><Pencil :size="18" /> Edit listing</Link>
@@ -258,3 +298,9 @@ const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 te
         <ShareSheet :show="sharing" kind="product" :id="product.id" :url="shareUrl || product.url" :title="product.title" :text="`${product.title} — ${product.price} on neaby`" :card-base="route('share.product', product.slug)" :qr-url="route('qr.product', product.slug)" @close="sharing = false" />
     </AppShell>
 </template>
+
+<style scoped>
+.in-cart-ribbon.is-popping { animation: ribbon-pop .55s cubic-bezier(.3, 1.5, .5, 1); }
+@keyframes ribbon-pop { 0% { transform: scale(.97); box-shadow: 0 0 0 0 rgba(22,178,106,.45); } 50% { transform: scale(1.015); box-shadow: 0 0 0 8px rgba(22,178,106,0); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .in-cart-ribbon.is-popping { animation: none; } }
+</style>

@@ -177,7 +177,7 @@ function submitSearch() {
                     <div class="ml-auto flex items-center gap-1">
                         <slot name="mobile-actions" />
                         <Link v-if="user" :href="route('messages.index')" class="icon-btn relative" aria-label="Messages"><MessageCircle :size="20" /><span v-if="counts.messages" class="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-red-500 px-1 text-center text-[9.5px] font-bold leading-4 text-white">{{ counts.messages > 9 ? '9+' : counts.messages }}</span></Link>
-                        <Link v-if="user && counts.cart" :href="route('cart.index')" class="icon-btn relative" aria-label="Cart"><CartIcon :size="20" /><span class="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-brand-600 px-1 text-center text-[9.5px] font-bold leading-4 text-white">{{ counts.cart }}</span></Link>
+                        <Link v-if="user && counts.cart" :href="route('cart.index')" data-cart-target class="icon-btn relative" aria-label="Cart"><CartIcon :size="20" /><span class="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-brand-600 px-1 text-center text-[9.5px] font-bold leading-4 text-white">{{ counts.cart }}</span></Link>
                         <Link v-if="!route().current('search')" :href="route('search')" class="icon-btn" aria-label="Search"><Search :size="20" /></Link>
                         <Link v-if="user" :href="route('profile.show')" aria-label="Profile"><Avatar :src="user.avatar" :initials="user.initials" :size="32" /></Link>
                         <Link v-else :href="route('login')" class="btn-sm btn-dark">Sign in</Link>

@@ -25,6 +25,8 @@ final class SafeMail
                 'host' => config('mail.mailers.smtp.host'),
                 'port' => config('mail.mailers.smtp.port'),
                 'scheme' => config('mail.mailers.smtp.scheme'),
+                'from' => config('mail.from.address'),
+                'hint' => 'run: php artisan neaby:mail-test you@example.com',
             ]);
 
             return false;

@@ -32,7 +32,7 @@ class NeabyNotice extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         $m = (new MailMessage)->subject($this->title.' · neaby')
-            ->greeting('Hi '.($notifiable->name ?: $notifiable->username).',')
+            ->greeting('Hi '.(($notifiable->name ?? null) ?: ($notifiable->username ?? null) ?: 'there').',')
             ->line($this->body);
         if ($this->url) {
             $m->action('Open neaby', $this->url);

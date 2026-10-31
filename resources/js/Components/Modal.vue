@@ -55,7 +55,17 @@ const closeOnEscape = (e) => {
     }
 };
 
-onMounted(() => document.addEventListener('keydown', closeOnEscape));
+onMounted(() => {
+    document.addEventListener('keydown', closeOnEscape);
+    // Mounted already open (e.g. <ShareSheet v-if="sharing" :show="!!sharing">):
+    // the watcher above never fires for the initial value, so the <dialog> was
+    // never opened and Share looked dead. Open it now.
+    if (props.show) {
+        document.body.style.overflow = 'hidden';
+        showSlot.value = true;
+        dialog.value?.showModal();
+    }
+});
 
 onUnmounted(() => {
     document.removeEventListener('keydown', closeOnEscape);
@@ -76,11 +86,11 @@ const maxWidthClass = computed(() => {
 
 <template>
     <dialog
-        class="z-50 m-0 min-h-full min-w-full overflow-y-auto bg-transparent backdrop:bg-transparent"
+        class="z-[80] m-0 min-h-full min-w-full overflow-y-auto bg-transparent backdrop:bg-transparent"
         ref="dialog"
     >
         <div
-            class="fixed inset-0 z-50 overflow-y-auto px-4 py-6 sm:px-0"
+            class="fixed inset-0 z-[80] overflow-y-auto px-4 py-6 sm:px-0"
             scroll-region
         >
             <Transition

@@ -7,16 +7,92 @@
  * quoted — makes Symfony throw "The "null" scheme is not supported", which is
  * what turned forgot-password into a 500. Normalise everything here.
  */
-$neabyMailScheme = (static function ($raw) {
-    $v = strtolower(trim((string) $raw, " \t\n\r\0\x0B\"'"));
+/*
+ * Mirrors what Paddy (Node/nodemailer, mail works) does right:
+ *   1. Accepts Paddy-style env names too (SMTP_HOST, SMTP_PORT, SMTP_USER,
+ *      SMTP_PASSWORD / SMTP_PASS, SMTP_SECURE, EMAIL_FROM) so the same Coolify
+ *      variables work in both apps. MAIL_* still wins when set.
+ *   2. TLS mode follows the PORT (nodemailer: secure = port === 465) instead
+ *      of trusting a free-text scheme — "tls"/"ssl" on the wrong port was a
+ *      silent connect/handshake failure. 465 → implicit TLS, everything else →
+ *      plain + opportunistic STARTTLS. SMTP_SECURE=true|false is an explicit
+ *      override, exactly like Paddy.
+ *   3. When a SMTP host is configured but MAIL_MAILER is unset, use SMTP
+ *      (Paddy auto-picks the provider from SMTP_HOST).
+ *   4. Sender falls back to the SMTP login when MAIL_FROM_ADDRESS is empty or a
+ *      placeholder — most SMTP servers reject a From the login can't send as.
+ *   5. IPv4-first connect (Paddy: NODE_OPTIONS=--dns-result-order=ipv4first),
+ *      see App\Mail\NeabySmtpTransportFactory.
+ */
+$neabyEnv = static function (string ...$keys) {
+    foreach ($keys as $k) {
+        $v = env($k);
+        if ($v === null) {
+            continue;
+        }
+        $t = trim((string) $v, " \t\n\r\0\x0B\"'");
+        if ($t !== '' && strtolower($t) !== 'null') {
+            return $t;
+        }
+    }
 
-    return match ($v) {
-        '', 'null', '(null)', 'none', 'false', 'auto' => null,
-        'tls', 'starttls', 'smtp' => 'smtp',
+    return null;
+};
+
+$neabyMailHost = $neabyEnv('MAIL_HOST', 'SMTP_HOST');
+// The .env.example placeholder counts as "not set" so SMTP_HOST can take over.
+if ($neabyMailHost !== null && preg_match('/(^|\.)example\.(com|org|net)$/i', $neabyMailHost)) {
+    $neabyMailHost = $neabyEnv('SMTP_HOST');
+}
+$neabyMailPort = (int) ($neabyEnv('MAIL_PORT', 'SMTP_PORT') ?? 587);
+$neabyMailUser = $neabyEnv('MAIL_USERNAME', 'SMTP_USER', 'SMTP_USERNAME');
+$neabyMailPass = $neabyEnv('MAIL_PASSWORD', 'SMTP_PASSWORD', 'SMTP_PASS');
+
+/*
+ * MAIL_SCHEME arrives from Coolify / .env in many spellings. Symfony only
+ * understands "smtp" (plain/STARTTLS) and "smtps" (implicit TLS). A literal
+ * "null" string made Symfony throw "The "null" scheme is not supported".
+ */
+$neabyMailScheme = (static function ($raw, $secure, int $port) {
+    $s = strtolower((string) $secure);
+    if (in_array($s, ['true', '1', 'yes', 'on'], true)) {
+        return 'smtps';
+    }
+    if (in_array($s, ['false', '0', 'no', 'off'], true)) {
+        return 'smtp';
+    }
+    // Port decides, like nodemailer. 587/25/2525 are never implicit TLS.
+    if ($port === 465) {
+        return 'smtps';
+    }
+    if (in_array($port, [25, 587, 2525], true)) {
+        return 'smtp';
+    }
+
+    return match (strtolower((string) $raw)) {
         'ssl', 'smtps' => 'smtps',
-        default => null,
+        default => 'smtp',
     };
-})(env('MAIL_SCHEME'));
+})($neabyEnv('MAIL_SCHEME', 'MAIL_ENCRYPTION'), $neabyEnv('SMTP_SECURE'), $neabyMailPort);
+
+// EMAIL_FROM may be "Name <addr>" (Paddy format).
+$neabyFromAddr = $neabyEnv('MAIL_FROM_ADDRESS');
+$neabyFromName = $neabyEnv('MAIL_FROM_NAME');
+if ($neabyFromAddr === null && ($ef = $neabyEnv('EMAIL_FROM'))) {
+    if (preg_match('/^\s*(.*?)\s*<([^>]+)>\s*$/', $ef, $m)) {
+        $neabyFromAddr = trim($m[2]);
+        $neabyFromName ??= trim($m[1], " \"'") ?: null;
+    } else {
+        $neabyFromAddr = $ef;
+    }
+}
+$neabyPlaceholderFrom = $neabyFromAddr === null
+    || preg_match('/@(.+\.)?(example\.(com|org|net)|localhost|your-domain\.com)$/i', $neabyFromAddr);
+if ($neabyPlaceholderFrom && $neabyMailUser && filter_var($neabyMailUser, FILTER_VALIDATE_EMAIL)) {
+    $neabyFromAddr = $neabyMailUser;
+}
+
+$neabyMailer = $neabyEnv('MAIL_MAILER') ?? ($neabyMailHost ? 'smtp' : 'log');
 
 return [
 
@@ -32,7 +108,7 @@ return [
     |
     */
 
-    'default' => env('MAIL_MAILER', 'log'),
+    'default' => $neabyMailer,
 
     /*
     |--------------------------------------------------------------------------
@@ -59,11 +135,16 @@ return [
             'transport' => 'smtp',
             'scheme' => $neabyMailScheme,
             'url' => env('MAIL_URL'),
-            'host' => env('MAIL_HOST', '127.0.0.1'),
-            'port' => (int) env('MAIL_PORT', 2525),
-            'username' => env('MAIL_USERNAME'),
-            'password' => env('MAIL_PASSWORD'),
-            'timeout' => (int) env('MAIL_TIMEOUT', 15),
+            'host' => $neabyMailHost ?? '127.0.0.1',
+            'port' => $neabyMailPort,
+            'username' => $neabyMailUser,
+            'password' => $neabyMailPass,
+            // nodemailer waits up to 30s for the greeting; 15s cut off slow
+            // shared-hosting SMTP servers (greet-pause / reverse-DNS checks).
+            'timeout' => (int) env('MAIL_TIMEOUT', 30),
+            // Paddy runs with --dns-result-order=ipv4first. Containers often
+            // resolve AAAA but have no IPv6 route. true = pin to the A record.
+            'prefer_ipv4' => filter_var(env('MAIL_PREFER_IPV4', true), FILTER_VALIDATE_BOOL),
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 
@@ -129,8 +210,8 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
+        'address' => $neabyFromAddr ?? 'hello@example.com',
+        'name' => $neabyFromName ?? env('APP_NAME', 'neaby'),
     ],
 
 ];

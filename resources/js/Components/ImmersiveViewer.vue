@@ -8,7 +8,9 @@
  */
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { ChevronDown, ChevronUp, ExternalLink, Heart, Share2, X } from 'lucide-vue-next';
+import { Check, ChevronDown, ChevronUp, ExternalLink, Heart, Share2, X } from 'lucide-vue-next';
+import CartPill from '@/Components/CartPill.vue';
+import { cartAdded, flyToCart } from '@/composables/cartFx';
 import Avatar from '@/Components/Avatar.vue';
 import ReachOut from '@/Components/ReachOut.vue';
 import ShareSheet from '@/Components/ShareSheet.vue';
@@ -105,11 +107,38 @@ function toggleSave(p) {
     saved[p.slug] = !saved[p.slug];
     router.post(route('saved.toggle', p.id), {}, { preserveScroll: true, preserveState: true, onError: () => (saved[p.slug] = !saved[p.slug]) });
 }
-function addToCart(p) {
+const inCart = (p) => Number(page.props.counts?.cart_items?.[p.id] || 0);
+const adding = reactive({}); // slug → true while posting
+const justAdded = reactive({}); // slug → true for ~1.6s after success
+const toast = ref(null); // { title, image, qty }
+let toastT = null;
+const layer = ref(null);
+function addToCart(p, e) {
     if (!page.props.auth?.user) return requireLogin();
     const d = details[p.slug];
     if (d?.has_options) return router.visit(d.url); // choose size/colour on the product page
-    router.post(route('cart.add', p.id), { quantity: 1 }, { preserveScroll: true, preserveState: true });
+    if (adding[p.slug]) return;
+    const btn = e?.currentTarget;
+    adding[p.slug] = true;
+    router.post(route('cart.add', p.id), { quantity: 1 }, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => {
+            nextTick(() => flyToCart(btn, p.image, layer.value));
+            cartAdded(1);
+            justAdded[p.slug] = true;
+            setTimeout(() => (justAdded[p.slug] = false), 1600);
+            toast.value = { title: p.title, image: p.image, qty: inCart(p) };
+            clearTimeout(toastT);
+            toastT = setTimeout(() => (toast.value = null), 3200);
+        },
+        onError: (errs) => {
+            toast.value = { error: errs.quantity || errs.options || "Couldn't add to cart." };
+            clearTimeout(toastT);
+            toastT = setTimeout(() => (toast.value = null), 3200);
+        },
+        onFinish: () => (adding[p.slug] = false),
+    });
 }
 function open(p) { emit('close'); router.visit(details[p.slug]?.url || route('products.show', p.slug)); }
 </script>
@@ -117,12 +146,15 @@ function open(p) { emit('close'); router.visit(details[p.slug]?.url || route('pr
 <template>
     <Teleport to="body">
         <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0" leave-active-class="transition duration-150" leave-to-class="opacity-0">
-            <div v-if="show" class="fixed inset-0 z-[60] bg-ink-950/80 text-white backdrop-blur-2xl" role="dialog" aria-modal="true" :aria-label="title">
+            <div v-if="show" ref="layer" class="fixed inset-0 z-[60] bg-ink-950/80 text-white backdrop-blur-2xl" role="dialog" aria-modal="true" :aria-label="title">
                 <!-- top bar -->
                 <div class="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-3 bg-gradient-to-b from-black/60 to-transparent px-4 pb-10 pt-[calc(env(safe-area-inset-top)+12px)]">
                     <span class="font-brand text-lg font-bold tracking-tight">neaby<span class="text-brand-400">.</span></span>
                     <span class="text-[11px] font-bold uppercase tracking-[.16em] text-white/70">{{ title }}</span>
                     <span class="ml-auto text-xs tabular-nums text-white/60">{{ active + 1 }} / {{ list.length }}</span>
+                    <Tip v-if="page.props.auth?.user && page.props.features?.checkout !== false" label="Cart" side="bottom" dark>
+                        <CartPill dark class="pointer-events-auto" @click="emit('close')" />
+                    </Tip>
                     <Tip label="Close (Esc)" side="bottom" dark>
                         <button class="immersive-btn pointer-events-auto h-10 w-10" aria-label="Close" @click="emit('close')"><X :size="20" /></button>
                     </Tip>
@@ -178,7 +210,13 @@ function open(p) { emit('close'); router.visit(details[p.slug]?.url || route('pr
                                 <button class="immersive-btn" aria-label="Share" @click="sharing = p"><Share2 :size="21" /></button>
                             </Tip>
                             <Tip v-if="details[p.slug]?.can_buy && details[p.slug]?.available > 0" :label="details[p.slug]?.has_options ? 'Choose options' : 'Add to cart'" side="left" dark>
-                                <button class="immersive-btn bg-brand-500/90 ring-brand-300/40 hover:bg-brand-500" aria-label="Add to cart" @click="addToCart(p)"><CartIcon :size="22" /></button>
+                                <button class="immersive-btn relative bg-brand-500/90 ring-brand-300/40 hover:bg-brand-500" :class="justAdded[p.slug] ? 'scale-110 bg-brand-400 ring-4 ring-brand-300/60' : ''" :disabled="adding[p.slug]" aria-label="Add to cart" @click="addToCart(p, $event)">
+                                    <Transition mode="out-in" enter-from-class="scale-50 opacity-0" leave-to-class="scale-50 opacity-0" enter-active-class="transition duration-200" leave-active-class="transition duration-150">
+                                        <Check v-if="justAdded[p.slug]" key="ok" :size="22" :stroke-width="3" />
+                                        <CartIcon v-else key="cart" :size="22" :class="adding[p.slug] ? 'animate-pulse' : ''" />
+                                    </Transition>
+                                    <span v-if="inCart(p)" class="absolute -right-1 -top-1 min-w-[20px] rounded-full bg-white px-1 text-center text-[11px] font-extrabold leading-5 text-brand-700 shadow ring-2 ring-brand-500" :aria-label="`${inCart(p)} in cart`">×{{ inCart(p) }}</span>
+                                </button>
                             </Tip>
                             <Tip label="Open listing" side="left" dark>
                                 <button class="immersive-btn" aria-label="Open listing" @click="open(p)"><ExternalLink :size="20" /></button>
@@ -187,14 +225,34 @@ function open(p) { emit('close'); router.visit(details[p.slug]?.url || route('pr
                     </section>
                 </div>
 
+                <!-- added-to-cart toast (inside the layer so it's never hidden behind it) -->
+                <Transition enter-from-class="opacity-0 -translate-y-3 scale-95" leave-to-class="opacity-0 -translate-y-2" enter-active-class="transition duration-300 ease-out" leave-active-class="transition duration-200">
+                    <div v-if="toast" class="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+64px)] z-30 mx-auto flex max-w-sm items-center gap-3 rounded-2xl bg-white/95 p-2 pr-3 text-ink-900 shadow-2xl ring-1 ring-black/5 backdrop-blur" role="status" aria-live="polite">
+                        <template v-if="!toast.error">
+                            <img v-if="toast.image" :src="toast.image" alt="" class="h-11 w-11 shrink-0 rounded-xl object-cover" />
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1 text-[13px] font-bold text-brand-700"><Check :size="15" :stroke-width="3" /> Added to cart<span v-if="toast.qty > 1" class="font-semibold text-ink-500"> · ×{{ toast.qty }} now</span></div>
+                                <div class="truncate text-xs text-ink-500">{{ toast.title }}</div>
+                            </div>
+                            <Link :href="route('cart.index')" class="btn-sm inline-flex shrink-0 items-center rounded-full bg-brand-600 px-3 font-bold text-white hover:bg-brand-700" @click="emit('close')">View cart</Link>
+                        </template>
+                        <div v-else class="px-2 py-1.5 text-sm font-semibold text-red-600">{{ toast.error }}</div>
+                    </div>
+                </Transition>
+
                 <!-- desktop up/down -->
                 <div class="absolute left-6 top-1/2 z-20 hidden -translate-y-1/2 flex-col gap-2 md:flex">
                     <button class="immersive-btn h-10 w-10" :disabled="active === 0" aria-label="Previous" @click="go(-1)"><ChevronUp :size="20" /></button>
                     <button class="immersive-btn h-10 w-10" :disabled="active >= list.length - 1" aria-label="Next" @click="go(1)"><ChevronDown :size="20" /></button>
                 </div>
 
+            </div>
+        </Transition>
+        <!-- Share card overlay: rendered OUTSIDE the z-[60] immersive layer (its
+             backdrop-blur creates a stacking context) and opened as a modal
+             <dialog> (browser top layer, z-[80] fallback) so it always sits above. -->
                 <ShareSheet
-                    v-if="sharing"
+                    v-if="show && sharing"
                     :show="!!sharing"
                     kind="product"
                     :id="sharing.id"
@@ -205,7 +263,5 @@ function open(p) { emit('close'); router.visit(details[p.slug]?.url || route('pr
                     :qr-url="route('qr.product', sharing.slug)"
                     @close="sharing = null"
                 />
-            </div>
-        </Transition>
     </Teleport>
 </template>
