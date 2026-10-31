@@ -27,6 +27,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -46,6 +47,12 @@ use Illuminate\Support\Str;
  *  ListingAi binding is forced to the offline FakeListingAi while seeding, and
  *  this seeder never calls it anyway). No emails are sent — inbox notices are
  *  written straight to the notifications table.
+ *
+ *  Photos: real stock photos (Pexels, free licence) are downloaded ONCE at seed
+ *  time into storage/app/public/demo/… — nothing is bundled in Git. ~120 small
+ *  JPEGs (≈8–10 MB total). If a download fails (offline box, CDN down) that one
+ *  image falls back to an offline GD placeholder, so seeding always succeeds.
+ *  NEABY_DEMO_PHOTOS=false skips downloads entirely. Wipe deletes demo/ too.
  */
 class NeabyDemoSeeder extends Seeder
 {
@@ -55,6 +62,70 @@ class NeabyDemoSeeder extends Seeder
     public const EMAIL_REGEX = '^neaby[0-9]+@beuden\.com\.ng$';
 
     public const IMAGE_DIR = 'demo';
+
+    /** Pexels photo ids (free licence) per store n → product index → [shots]. Downloaded at seed time. */
+    private const PRODUCT_PHOTOS = [
+        1 => [0 => [32289598, 35576577], 1 => [10133278], 2 => [4440566], 3 => [17273203]],
+        2 => [0 => [29020349, 12741170], 1 => [47261], 2 => [29356607], 3 => [31145644]],
+        3 => [0 => [9774872, 14788377], 1 => [35899861], 2 => [6621471], 3 => [7691112]],
+        4 => [0 => [13533551], 1 => [3866236], 2 => [28054343], 3 => [7936983]],
+        5 => [0 => [18368099, 260044], 1 => [35070982], 2 => [27046146], 3 => [9630186]],
+        6 => [0 => [17320162, 3356170], 1 => [14296197], 2 => [8867400], 3 => [35382770]],
+        7 => [0 => [36346840, 7420513], 1 => [32281630], 2 => [28110905], 3 => [38285914]],
+        8 => [0 => [12588994, 3875085], 1 => [27086424], 2 => [23692992], 3 => [3662712]],
+        9 => [0 => [8670204, 7659573], 1 => [7149595], 2 => [5995227], 3 => [38293145]],
+        10 => [0 => [7743320, 35567437], 1 => [38083557], 2 => [7318664], 3 => [4716814]],
+        11 => [0 => [14355033, 16853521], 1 => [16093243], 2 => [34549909], 3 => [40060000]],
+        12 => [0 => [34523107, 13813479], 1 => [36738957], 2 => [33574332], 3 => [1239221]],
+        13 => [0 => [7128661], 1 => [29667041], 2 => [5554657], 3 => [1792734]],
+        14 => [0 => [13350036], 1 => [33695403], 2 => [9562265], 3 => [37177070]],
+        15 => [0 => [7347538], 1 => [32713414], 2 => [8486978], 3 => [9875418]],
+        16 => [0 => [6893890, 11129922], 1 => [5202925], 2 => [374110], 3 => [326512]],
+    ];
+
+    /** Store cover photos (Pexels ids), store n → id. Logos use the store's first product photo. */
+    private const COVER_PHOTOS = [
+        1 => 8311880,
+        2 => 33797585,
+        3 => 23228944,
+        4 => 34993898,
+        5 => 33812005,
+        6 => 13439624,
+        7 => 15171155,
+        8 => 5997675,
+        9 => 8657297,
+        10 => 4716814,
+        11 => 7314460,
+        12 => 9221307,
+        13 => 36150701,
+        14 => 19499386,
+        15 => 6263062,
+        16 => 9814931,
+    ];
+
+    /** Profile photos (Pexels ids), user n → id. */
+    private const AVATAR_PHOTOS = [
+        1 => 37038761,
+        2 => 5448163,
+        3 => 2520446,
+        4 => 30275077,
+        5 => 16029834,
+        6 => 32621205,
+        7 => 40154321,
+        8 => 27038743,
+        9 => 7552695,
+        10 => 34630594,
+        11 => 12895422,
+        12 => 29563571,
+        13 => 31887155,
+        14 => 13801809,
+        15 => 17910791,
+        16 => 29204802,
+        17 => 8052215,
+        18 => 39598425,
+        19 => 30518441,
+        20 => 34786943,
+    ];
 
     /**
      * [n, name, username, city, state, bio]
@@ -204,6 +275,9 @@ class NeabyDemoSeeder extends Seeder
         [20, 10, [1], 'delivered', 'delivery', 7],
     ];
 
+    /** Downloaded photo bytes keyed by kind + Pexels id: p=product 800², l=logo 320², c=cover 1200×480, a=avatar 320². */
+    private array $fetched = [];
+
     private array $users = [];
 
     private array $stores = [];
@@ -236,6 +310,8 @@ class NeabyDemoSeeder extends Seeder
         }
 
         $this->call([CategorySeeder::class, MembershipPlanSeeder::class]);
+
+        $this->fetchPhotos(); // network work happens before the DB transaction
 
         DB::transaction(function () {
             $this->seedUsers();
@@ -272,6 +348,9 @@ class NeabyDemoSeeder extends Seeder
             $u->forceFill(['email_verified_at' => now()->subDays(40 - $n), 'is_admin' => $n === 1]);
             $u->created_at = now()->subDays(45 - $n);
             $u->save();
+            if ($bytes = $this->fetched['a'.(self::AVATAR_PHOTOS[$n] ?? 0)] ?? null) {
+                $u->forceFill(['avatar_path' => app(ObjectStore::class)->put(self::IMAGE_DIR."/avatars/{$u->id}.jpg", $bytes, 'image/jpeg')])->save();
+            }
             $this->users[$n] = $u;
         }
     }
@@ -308,6 +387,11 @@ class NeabyDemoSeeder extends Seeder
             $store->views_count = random_int(120, 2400);
             $store->created_at = now()->subDays(40 - $n);
             $store->save();
+            $logoId = self::PRODUCT_PHOTOS[$n][0][0] ?? 0;
+            $store->forceFill([
+                'logo_path' => $objects->put(self::IMAGE_DIR."/stores/{$store->id}-logo.jpg", $this->fetched['l'.$logoId] ?? $this->photo($accent, $storeName, '', $n), 'image/jpeg'),
+                'cover_path' => $objects->put(self::IMAGE_DIR."/stores/{$store->id}-cover.jpg", $this->fetched['c'.(self::COVER_PHOTOS[$n] ?? 0)] ?? $this->photo($accent, $tagline, $storeName, $n + 7), 'image/jpeg'),
+            ])->save();
             $this->stores[$n] = $store;
 
             foreach ($items as $i => [$title, $description, $naira, $compare, $condition, $qty]) {
@@ -327,10 +411,12 @@ class NeabyDemoSeeder extends Seeder
                     'delivery_fee_minor' => in_array($catSlug, ['services'], true) ? 0 : [150_000, 200_000, 250_000, 300_000][$i % 4],
                 ])->save();
 
-                $shots = $i === 0 ? 2 : 1;
+                $ids = self::PRODUCT_PHOTOS[$n][$i] ?? [];
+                $shots = max(1, count($ids));
                 for ($s = 0; $s < $shots; $s++) {
-                    $key = $objects->put(self::IMAGE_DIR.'/products/'.$product->slug.'-'.($s + 1).'.jpg', $this->photo($accent, $title, $storeName, $i + $s * 3), 'image/jpeg');
-                    $product->images()->create(['path' => $key, 'width' => 900, 'height' => 900, 'sort' => $s + 1]);
+                    $bytes = $this->fetched['p'.($ids[$s] ?? 0)] ?? $this->photo($accent, $title, $storeName, $i + $s * 3);
+                    $key = $objects->put(self::IMAGE_DIR.'/products/'.$product->slug.'-'.($s + 1).'.jpg', $bytes, 'image/jpeg');
+                    $product->images()->create(['path' => $key, 'width' => 800, 'height' => 800, 'sort' => $s + 1]);
                 }
                 $this->products[$n][$i] = $product;
             }
@@ -731,7 +817,68 @@ class NeabyDemoSeeder extends Seeder
         ]);
     }
 
-    // ── Demo "photo": accent gradient + title, rendered offline with GD ──
+    // ── Real photos: Pexels CDN (free licence), fetched once at seed time ─
+
+    private function fetchPhotos(): void
+    {
+        $flag = strtolower(trim((string) (getenv('NEABY_DEMO_PHOTOS') ?: env('NEABY_DEMO_PHOTOS', 'true'))));
+        if (in_array($flag, ['false', '0', 'no', 'off'], true)) {
+            $this->command?->line('[neaby] demo photos: NEABY_DEMO_PHOTOS=false — using offline placeholders.');
+
+            return;
+        }
+
+        $wanted = [];
+        foreach (self::PRODUCT_PHOTOS as $n => $items) {
+            foreach ($items as $i => $ids) {
+                foreach ($ids as $id) {
+                    $wanted['p'.$id] = [$id, 800, 800];
+                }
+                if ($i === 0 && $ids) {
+                    $wanted['l'.$ids[0]] = [$ids[0], 320, 320];
+                }
+            }
+        }
+        foreach (self::COVER_PHOTOS as $id) {
+            $wanted['c'.$id] = [$id, 1200, 480];
+        }
+        foreach (self::AVATAR_PHOTOS as $id) {
+            $wanted['a'.$id] = [$id, 320, 320];
+        }
+
+        $failed = 0;
+        foreach (array_chunk($wanted, 10, true) as $chunk) {
+            try {
+                $responses = Http::pool(function ($pool) use ($chunk) {
+                    $reqs = [];
+                    foreach ($chunk as $key => [$id, $w, $h]) {
+                        $reqs[] = $pool->as($key)->timeout(20)->connectTimeout(8)->withHeaders(['User-Agent' => 'neaby-demo-seeder'])
+                            ->get("https://images.pexels.com/photos/{$id}/pexels-photo-{$id}.jpeg", [
+                                'auto' => 'compress', 'cs' => 'tinysrgb', 'fit' => 'crop', 'w' => $w, 'h' => $h,
+                            ]);
+                    }
+
+                    return $reqs;
+                });
+            } catch (\Throwable) {
+                $responses = [];
+            }
+            foreach (array_keys($chunk) as $key) {
+                $r = $responses[$key] ?? null;
+                $body = ($r instanceof \Illuminate\Http\Client\Response && $r->successful()) ? $r->body() : '';
+                if ($body !== '' && strlen($body) < 1_500_000 && @getimagesizefromstring($body)) {
+                    $this->fetched[$key] = $body;
+                } else {
+                    $failed++;
+                }
+            }
+        }
+
+        $kb = (int) round(array_sum(array_map('strlen', $this->fetched)) / 1024);
+        $this->command?->line('[neaby] demo photos: downloaded '.count($this->fetched).'/'.count($wanted)." ({$kb} KB)".($failed ? " — {$failed} fell back to offline placeholders." : '.'));
+    }
+
+    // ── Fallback "photo": accent gradient + title, rendered offline with GD ──
 
     private function photo(string $hex, string $title, string $store, int $seed): string
     {
@@ -809,7 +956,12 @@ class NeabyDemoSeeder extends Seeder
 
         $storeIds = Store::query()->whereIn('user_id', $ids)->pluck('id')->all();
         $productIds = Product::withTrashed()->whereIn('user_id', $ids)->pluck('id')->all();
-        $paths = ProductImage::query()->whereIn('product_id', $productIds)->pluck('path')->all();
+        $paths = [
+            ...ProductImage::query()->whereIn('product_id', $productIds)->pluck('path')->all(),
+            ...User::query()->whereIn('id', $ids)->whereNotNull('avatar_path')->pluck('avatar_path')->all(),
+            ...Store::query()->whereIn('id', $storeIds)->whereNotNull('logo_path')->pluck('logo_path')->all(),
+            ...Store::query()->whereIn('id', $storeIds)->whereNotNull('cover_path')->pluck('cover_path')->all(),
+        ];
 
         DB::transaction(function () use ($ids, $storeIds) {
             $orderIds = Order::query()->whereIn('buyer_id', $ids)->orWhereIn('seller_id', $ids)->orWhereIn('store_id', $storeIds)->pluck('id')->all();

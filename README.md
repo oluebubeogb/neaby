@@ -212,6 +212,7 @@ and `php artisan storage:link`. Uploads up to 100 MB per request are allowed by 
 | `NEABY_REQUIRE_PRODUCT_REVIEW` | | `false` | `true` = new listings wait in `pending` |
 | `NEABY_SEED_CATEGORIES` | | `true` | Seed default categories on boot |
 | `NEABY_SEED_DEMO` | | `false` | `true` = seed the demo cast on boot (once, idempotent) · `wipe` = remove it on boot · `false` = leave data alone |
+| `NEABY_DEMO_PHOTOS` | | `true` | Demo seed downloads ~10 MB of real photos; `false` = offline placeholders only |
 | `LISTING_AI_DRIVER` | | `fake` | `fake` (offline) · `openai` · `null` |
 | `LISTING_AI_BASE_URL` `LISTING_AI_API_KEY` `LISTING_AI_MODEL` | | | Only for `openai` (any OpenAI-compatible API) |
 | `PAYMENT_PROVIDER` | | `fake` | `fake` · `monnify` (see below) |
@@ -302,7 +303,8 @@ Every demo email is verified. Example: email `neaby1@beuden.com.ng`, password `n
 
 ### What gets seeded
 
-- 16 stores (one per category), 64 products in all 16 categories, with generated “DEMO PHOTO” images (offline, GD).
+- 16 stores (one per category), 64 products in all 16 categories, with realistic photos: product images,
+  store logos (DP) and covers, and profile photos for all 20 demo users.
 - Memberships with paid (fake-provider) payments and entitlements: resale suppliers, resellers, Seller Pro.
 - Resale: supplier products open for resale, 6 reseller offers, a referral, supplier requests in every status
   (sent → availability confirmed → terms proposed → accepted → fulfilled, and cancelled).
@@ -311,6 +313,16 @@ Every demo email is verified. Example: email `neaby1@beuden.com.ng`, password `n
 - Carts, saved items, product views, shares, QR/share visits, enquiries and card downloads (insights have data).
 - Sponsored placements (3 active, 1 ended), a completed CSV import batch with a failed row.
 - Inbox: welcome, order, resale, membership, sponsored, import, store tips and admin notices — read and unread.
+
+### Demo photos (small, fetched on seed — not in Git)
+
+- Photos are free-licence stock images from the Pexels CDN, **downloaded once when the demo is seeded** straight
+  into `storage/app/public/demo/` (`products/`, `stores/`, `avatars/`). Nothing is bundled in the repo or zip.
+- About 120 compressed JPEGs, ~8–10 MB in total (products 800×800, logos/avatars 320×320, covers 1200×480).
+- No internet / CDN down? Each missing photo falls back to an offline generated placeholder, so seeding never fails.
+  `NEABY_DEMO_PHOTOS=false` skips downloads entirely (placeholders only).
+- `neaby:demo wipe` (or `NEABY_SEED_DEMO=wipe`) deletes every demo photo along with the demo rows, including the
+  whole `storage/app/public/demo/` folder.
 
 ### Removing the demo for good (before real use)
 
