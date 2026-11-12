@@ -15,21 +15,27 @@ use App\Models\User;
 use App\Notifications\NeabyNotice;
 use App\Services\Payments\PaymentManager;
 use App\Services\Payments\PaymentService;
+use App\Services\Wallet\WalletService;
 use App\Support\Notify;
 use App\Support\Present;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Ordinary checkout (blueprint 12/17): cart → one order per store → stock held
  * for N minutes → pay once → verified server-side → stock consumed.
  * Failure / expiry releases holds. Late success with no stock left auto-refunds.
+ *
+ * Paying: in-app wallet (full debit when it covers the total), pay on the go
+ * (Monnify hosted checkout), or split — the wallet part is HELD, captured only
+ * when the gateway remainder is verified paid and released if it fails.
  */
 class CheckoutService
 {
-    public function __construct(private readonly Inventory $inventory, private readonly PaymentService $payments) {}
+    public function __construct(private readonly Inventory $inventory, private readonly PaymentService $payments, private readonly WalletService $wallet) {}
 
     public function cartFor(User $user): Cart
     {
@@ -105,7 +111,8 @@ class CheckoutService
     }
 
     /**
-     * @return array{orders: Collection<int, Order>, checkout_url: string}
+     * @param  array  $data  delivery/contact fields + optional `use_wallet`
+     * @return array{orders: Collection<int, Order>, checkout_url: string, wallet_minor: int, paid: bool}
      */
     public function placeOrders(User $user, array $data): array
     {
@@ -177,20 +184,95 @@ class CheckoutService
             return $orders;
         });
 
-        $total = $orders->sum('total_minor');
-        $result = $this->payments->start($user, 'order', $total, 'neaby order '.$orders->pluck('number')->implode(', '), [
-            'checkout_reference' => $checkoutRef,
-            'order_ids' => $orders->pluck('id')->all(),
-        ], $checkoutRef);
+        $total = (int) $orders->sum('total_minor');
+        $description = 'neaby order '.$orders->pluck('number')->implode(', ');
+        $walletPart = ! empty($data['use_wallet']) && config('neaby.wallet.enabled', true)
+            ? min($this->wallet->for($user)->available(), $total) : 0;
+
+        try {
+            $this->allocateWallet($orders, $walletPart);
+
+            // 1) Wallet covers everything: debit now, no gateway.
+            if ($walletPart > 0 && $walletPart === $total) {
+                return $this->payFromWallet($user, $orders, $checkoutRef, $total, $description);
+            }
+
+            // 2) Split: hold the wallet part, pay the rest on the go. 3) Pay on the go: no hold.
+            $hold = $walletPart > 0 ? $this->wallet->hold($user, $walletPart, $checkoutRef) : null;
+            try {
+                $result = $this->payments->start($user, 'order', $total - $walletPart, $description, [
+                    'checkout_reference' => $checkoutRef,
+                    'order_ids' => $orders->pluck('id')->all(),
+                    'wallet_minor' => $walletPart,
+                    'order_total_minor' => $total,
+                ], $checkoutRef);
+            } catch (Throwable $e) {
+                if ($hold) {
+                    $this->wallet->release($hold);
+                }
+                throw $e;
+            }
+            $hold?->forceFill(['payment_transaction_id' => $result['transaction']->id])->save();
+        } catch (Throwable $e) {
+            // Nothing was charged: free the stock and close the orders so the cart can be retried.
+            foreach ($orders as $order) {
+                $this->releaseHolds($order);
+                $order->forceFill(['status' => 'payment_failed', 'payment_status' => 'failed'])->save();
+            }
+            throw $e;
+        }
 
         Order::query()->whereIn('id', $orders->pluck('id'))->update(['payment_transaction_id' => $result['transaction']->id]);
 
-        return ['orders' => $orders, 'checkout_url' => $result['checkout_url']];
+        return ['orders' => $orders, 'checkout_url' => $result['checkout_url'], 'wallet_minor' => $walletPart, 'paid' => false];
+    }
+
+    /** Spread the wallet amount over the per-store orders (in order) so refunds know what to put back. */
+    private function allocateWallet(Collection $orders, int $walletPart): void
+    {
+        $left = $walletPart;
+        foreach ($orders as $order) {
+            $share = min($left, (int) $order->total_minor);
+            $left -= $share;
+            if ($share !== (int) $order->wallet_minor) {
+                $order->forceFill(['wallet_minor' => $share])->save();
+            }
+        }
+    }
+
+    private function payFromWallet(User $user, Collection $orders, string $checkoutRef, int $total, string $description): array
+    {
+        DB::transaction(function () use ($user, $orders, $checkoutRef, $total, $description) {
+            $tx = PaymentTransaction::create([
+                'user_id' => $user->id,
+                'provider' => 'wallet',
+                'reference' => $checkoutRef,
+                'purpose' => 'order',
+                'amount_minor' => $total,
+                'currency' => config('neaby.currency', 'NGN'),
+                'status' => 'paid',
+                'paid_at' => now(),
+                'payload' => ['meta' => ['checkout_reference' => $checkoutRef, 'order_ids' => $orders->pluck('id')->all(), 'wallet_minor' => $total], 'description' => $description],
+            ]);
+            $this->wallet->debit($user, $total, 'order:'.$checkoutRef, 'order', $tx->id, $description);
+            Order::query()->whereIn('id', $orders->pluck('id'))->update(['payment_transaction_id' => $tx->id]);
+            $this->onPaid($tx);
+            AuditLog::create(['actor_id' => $user->id, 'action' => 'payment.paid', 'subject_type' => PaymentTransaction::class, 'subject_id' => $tx->id,
+                'meta' => ['reference' => $checkoutRef, 'purpose' => 'order', 'amount_minor' => $total, 'provider' => 'wallet']]);
+        });
+
+        $url = $orders->count() === 1 ? route('orders.show', $orders->first()) : route('orders.index');
+
+        return ['orders' => $orders, 'checkout_url' => $url, 'wallet_minor' => $total, 'paid' => true];
     }
 
     /** Payment verified (inside PaymentService's lock). */
     public function onPaid(PaymentTransaction $tx): void
     {
+        // Split checkout: the gateway part is verified, so the held wallet part becomes a real debit.
+        if ($tx->provider !== 'wallet' && ($hold = $this->wallet->holdFor($tx))) {
+            $this->wallet->capture($hold, $tx->payload['description'] ?? null);
+        }
         $orders = Order::query()->where('payment_transaction_id', $tx->id)->lockForUpdate()->get();
         foreach ($orders as $order) {
             if ($order->payment_status === 'paid') {
@@ -251,6 +333,9 @@ class CheckoutService
 
     public function onFailed(PaymentTransaction $tx): void
     {
+        if ($hold = $this->wallet->holdFor($tx)) {
+            $this->wallet->release($hold); // wallet part is spendable again
+        }
         $orders = Order::query()->where('payment_transaction_id', $tx->id)->where('status', 'pending_payment')->lockForUpdate()->get();
         foreach ($orders as $order) {
             $this->releaseHolds($order);
@@ -305,13 +390,25 @@ class CheckoutService
         foreach ($restock as $productId => $qty) {
             $this->inventory->restock($productId, $qty);
         }
-        $instant = app(PaymentManager::class)->provider($order->transaction?->provider)->name() === 'fake';
+        // Whatever was paid from the wallet goes straight back to the wallet; only the
+        // gateway part (if any) follows the provider refund flow.
+        $walletPart = min((int) $order->wallet_minor, (int) $order->total_minor);
+        $gatewayPart = (int) $order->total_minor - $walletPart;
+        if ($walletPart > 0 && $order->buyer) {
+            $this->wallet->credit($order->buyer, $walletPart, 'refund:'.$order->number, 'refund', $order->payment_transaction_id, "Refund · order {$order->number}");
+        }
+        $provider = $order->transaction?->provider;
+        $instant = $gatewayPart === 0
+            || app(PaymentManager::class)->provider($provider === 'wallet' ? null : $provider)->name() === 'fake';
         $refund = Refund::create([
             'order_id' => $order->id,
             'requested_by' => $actor?->id,
-            'amount_minor' => $order->total_minor,
+            'amount_minor' => $gatewayPart > 0 ? $gatewayPart : $walletPart,
             'currency' => $order->currency,
-            'reason' => $reason,
+            'reason' => implode(' · ', array_filter([
+                $reason,
+                $walletPart > 0 ? ($gatewayPart > 0 ? Present::money($walletPart).' returned to wallet' : 'Refunded to wallet') : null,
+            ])) ?: null,
             'status' => $instant ? 'processed' : 'pending',
             'processed_at' => $instant ? now() : null,
         ]);

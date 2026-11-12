@@ -2,9 +2,12 @@
 
 namespace App\Services\Feed;
 
+use App\Support\Present;
 use App\Models\Product;
 use App\Models\ProductEvent;
 use App\Models\ProductView;
+use App\Services\Geo\Near;
+use App\Services\Geo\Proximity;
 use App\Services\Growth\SponsoredService;
 use Illuminate\Support\Facades\DB;
 use App\Models\User;
@@ -15,6 +18,9 @@ use Illuminate\Support\Collection;
  * listing quality + seller quality + distinct-actor engagement (saves, shares,
  * share visits, purchases — log-capped) + new-seller boost + seller diversity.
  * Sponsored placements are inserted at most 1 per N items and always flagged.
+ * When the shopper shared a location, nearby stores get a strong boost (same
+ * area → nearby towns → region) and nearby stock is always in the candidate pool;
+ * everything else still shows, just later.
  * Explainable, no model call. Never ranks by raw time-on-page.
  */
 class ForYouFeed
@@ -23,22 +29,36 @@ class ForYouFeed
 
     private const MAX_PER_STORE_IN_WINDOW = 2; // per 12 consecutive items
 
-    public function page(?User $user, ?string $sessionHash, int $page = 1, int $perPage = 24, ?int $categoryId = null): array
+    private const NEARBY_CANDIDATES = 200;
+
+    /** Score boost per proximity tier (Proximity::TIERS): same area, nearby towns, region, far. */
+    private const PROXIMITY_BOOST = [0 => 1.0, 1 => 0.65, 2 => 0.4, 3 => 0.15, 4 => 0.0, 5 => 0.0];
+
+    public function page(?User $user, ?string $sessionHash, int $page = 1, int $perPage = 24, ?int $categoryId = null, ?Near $near = null): array
     {
         $affinity = $this->affinity($user, $sessionHash);
-
-        $candidates = Product::query()
+        $base = fn () => Product::query()
             ->published()
-            ->when($categoryId, fn ($q) => $q->where('category_id', $categoryId))
-            ->with(['cover', 'store:id,name,slug,logo_path,accent,status,created_at,quality_score', 'category:id,name,slug'])
-            ->orderByDesc('published_at')
-            ->limit(self::CANDIDATES)
-            ->get();
+            ->when($categoryId, fn ($q) => $q->where('products.category_id', $categoryId))
+            ->with(['cover', 'store:'.Present::STORE_CARD_COLUMNS.',created_at,quality_score', 'category:id,name,slug']);
+
+        $candidates = $base()->orderByDesc('published_at')->limit(self::CANDIDATES)->get();
+
+        // Nearby stock is always considered, even if it's older than the freshest 400.
+        if ($near) {
+            [$tierSql, $tierBindings] = Proximity::tierSql($near, 'geo_store');
+            $nearby = $base()->select('products.*')
+                ->join('stores as geo_store', 'geo_store.id', '=', 'products.store_id')
+                ->whereRaw("{$tierSql} <= 2", $tierBindings)
+                ->orderByDesc('products.published_at')->limit(self::NEARBY_CANDIDATES)->get();
+            $candidates = $candidates->concat($nearby)->unique('id')->values();
+        }
 
         $signals = $this->signals($candidates->pluck('id')->all());
 
         $ranked = $this->diversify(
-            $candidates->sortByDesc(fn (Product $p) => $this->score($p, $affinity, $signals[$p->id] ?? []))->values()
+            $candidates->sortByDesc(fn (Product $p) => $this->score($p, $affinity, $signals[$p->id] ?? [])
+                + $this->proximityBoost($near, $p))->values()
         );
 
         $slice = $ranked->slice(($page - 1) * $perPage, $perPage)->values();
@@ -48,7 +68,17 @@ class ForYouFeed
             'items' => $slice,
             'has_more' => $ranked->count() > $page * $perPage,
             'personalised' => ! empty($affinity),
+            'nearby' => (bool) $near,
         ];
+    }
+
+    private function proximityBoost(?Near $near, Product $p): float
+    {
+        if (! $near) {
+            return 0.0;
+        }
+
+        return self::PROXIMITY_BOOST[Proximity::tierFor(Proximity::storeKm($near, $p->store, $p->city, $p->state))];
     }
 
     /** @return array<int, float> category_id => weight 0..1 */
@@ -95,9 +125,10 @@ class ForYouFeed
             return [];
         }
         $out = [];
+        $text = DB::getDriverName() === 'mysql' ? 'CHAR' : 'TEXT'; // portable cast (was Postgres-only ::text)
         ProductEvent::query()->whereIn('product_id', $ids)->where('created_at', '>=', now()->subDays(30))
             ->whereIn('type', ['save', 'share', 'share_visit', 'qr_visit', 'purchase'])
-            ->selectRaw("product_id, type, count(distinct coalesce('u' || user_id::text, 's' || session_hash)) as c")
+            ->selectRaw("product_id, type, count(distinct coalesce('u' || CAST(user_id AS {$text}), 's' || session_hash)) as c")
             ->groupBy('product_id', 'type')->get()
             ->each(function ($r) use (&$out) {
                 $out[$r->product_id][$r->type] = (int) $r->c;

@@ -34,7 +34,7 @@ class MonnifyPaymentProvider implements PaymentProvider
 
     private function base(): string
     {
-        return rtrim($this->config['base_url'] ?? 'https://sandbox.monnify.com', '/');
+        return rtrim($this->config['base_url'] ?? 'https://api.monnify.com', '/');
     }
 
     private function accessToken(): string

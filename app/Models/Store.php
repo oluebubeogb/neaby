@@ -35,9 +35,23 @@ class Store extends Model
         return $this->hasMany(Product::class);
     }
 
+    public function photos(): HasMany
+    {
+        return $this->hasMany(StorePhoto::class);
+    }
+
+    /** True when the owner pinned the shop with GPS and confirmed it. */
+    public function hasGps(): bool
+    {
+        return $this->lat !== null && $this->lng !== null && $this->location_confirmed_at !== null;
+    }
+
     protected function casts(): array
     {
-        return ['quality_breakdown' => 'array', 'quality_score' => 'integer', 'quality_computed_at' => 'datetime'];
+        return [
+            'quality_breakdown' => 'array', 'quality_score' => 'integer', 'quality_computed_at' => 'datetime',
+            'lat' => 'float', 'lng' => 'float', 'location_confirmed_at' => 'datetime', 'location_accuracy_m' => 'integer',
+        ];
     }
 
     public function scopeActive(Builder $q): Builder

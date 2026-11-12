@@ -34,7 +34,7 @@ class HubController extends Controller
                 ->where(fn ($x) => $x->whereNull('expires_at')->orWhere('expires_at', '>', now()->subDays(config('neaby.membership.grace_days', 3)))))
             ->when($q !== '', fn ($w) => $w->where('title', 'ilike', '%'.str_replace(['%', '_'], ['\%', '\_'], $q).'%'))
             ->when($request->filled('category'), fn ($w) => $w->whereHas('category', fn ($c) => $c->where('slug', $request->string('category'))))
-            ->with(['cover', 'store:id,name,slug,logo_path,accent,status', 'category:id,name,slug'])
+            ->with(['cover', 'store:'.Present::STORE_CARD_COLUMNS, 'category:id,name,slug'])
             ->latest('resale_enabled_at')->paginate(24)->withQueryString();
 
         $mine = ResellerListing::query()->where('reseller_id', $user->id)->pluck('id', 'original_product_id');

@@ -35,7 +35,15 @@ class OfferPageController extends Controller
 
         $p = $listing->product;
         $wa = $listing->contact_whatsapp ?: null;
-        $seo = Seo::make($listing->title(), Present::excerpt($listing->custom_description ?: $p->description), $p->images->first() ? Present::imageUrl($p->images->first()->path) : null, route('offers.show', $listing), 'product');
+        [$cardImage, $cardSize] = Seo::card('share.offer', $listing, $request->query('card'));
+        $seo = Seo::make(
+            $listing->title(),
+            Present::excerpt($listing->custom_description ?: $p->description),
+            $live ? $cardImage : ($p->images->first() ? Present::imageUrl($p->images->first()->path) : null),
+            route('offers.show', $listing),
+            'product',
+            imageSize: $live ? $cardSize : null,
+        );
 
         return Inertia::render('Resell/Offer', [
             'offer' => Present::offerCard($listing) + [

@@ -8,26 +8,29 @@ use App\Models\User;
 use App\Services\Commerce\CheckoutService;
 use App\Services\Growth\SponsoredService;
 use App\Services\Membership\MembershipService;
+use App\Services\Wallet\WalletService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * One payment pipeline for every purpose (order | membership | sponsored):
+ * One payment pipeline for every purpose (order | membership | sponsored | wallet_topup):
  *   start()    → PaymentTransaction + provider checkout URL
  *   complete() → server-side verify with the provider, then idempotent fulfilment.
  * The browser redirect is never trusted on its own; webhooks call complete() too.
  */
 class PaymentService
 {
-    public const PURPOSES = ['order', 'membership', 'sponsored'];
+    public const PURPOSES = ['order', 'membership', 'sponsored', 'wallet_topup'];
 
     public function __construct(private readonly PaymentManager $payments) {}
 
     public static function newReference(string $purpose): string
     {
-        return 'NB-'.strtoupper(substr($purpose, 0, 3)).'-'.now()->format('ymd').'-'.Str::upper(Str::random(10));
+        $tag = $purpose === 'wallet_topup' ? 'WAL' : strtoupper(substr($purpose, 0, 3));
+
+        return 'NB-'.$tag.'-'.now()->format('ymd').'-'.Str::upper(Str::random(10));
     }
 
     /** @return array{transaction: PaymentTransaction, checkout_url: string} */
@@ -129,6 +132,7 @@ class PaymentService
             'order' => app(CheckoutService::class)->onPaid($tx),
             'membership' => app(MembershipService::class)->onPaid($tx),
             'sponsored' => app(SponsoredService::class)->onPaid($tx),
+            'wallet_topup' => app(WalletService::class)->onTopupPaid($tx),
             default => null,
         };
     }

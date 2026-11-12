@@ -34,6 +34,11 @@ Artisan::command('neaby:quality:recompute', function (SellerQuality $quality) {
     $this->info('Recomputed '.$quality->recomputeAll().' store quality score(s).');
 })->purpose('Recompute seller quality scores used by For You ranking');
 
+Artisan::command('neaby:wallet:reconcile', function (\App\Services\Wallet\WalletService $wallets, \App\Services\Payments\PaymentService $payments) {
+    $this->info('Re-checked '.$wallets->reconcile($payments).' wallet hold(s) on abandoned split checkouts.');
+})->purpose('Release wallet holds whose card/transfer remainder failed or expired at the gateway');
+
+Schedule::command('neaby:wallet:reconcile')->everyTenMinutes()->withoutOverlapping();
 Schedule::command('neaby:reservations:release')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('neaby:memberships:sweep')->hourly()->withoutOverlapping();
 Schedule::command('neaby:quality:recompute')->dailyAt('03:15')->withoutOverlapping();

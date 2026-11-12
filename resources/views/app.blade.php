@@ -19,6 +19,11 @@
         <meta property="og:description" content="{{ $seo['description'] }}">
         <meta property="og:url" content="{{ $seo['canonical'] }}">
         <meta property="og:image" content="{{ $seo['image'] }}">
+        @if (! empty($seo['image_size']))
+            <meta property="og:image:type" content="image/png">
+            <meta property="og:image:width" content="{{ $seo['image_size'][0] }}">
+            <meta property="og:image:height" content="{{ $seo['image_size'][1] }}">
+        @endif
         <meta property="og:locale" content="en_NG">
         <meta name="twitter:card" content="summary_large_image">
         <meta name="twitter:title" content="{{ $seo['title'] }}">

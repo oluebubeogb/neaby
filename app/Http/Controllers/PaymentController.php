@@ -27,7 +27,7 @@ class PaymentController extends Controller
         $tx = $payments->complete($reference) ?? $tx;
 
         $msg = match ($tx->status) {
-            'paid' => ['success', 'Payment confirmed.'],
+            'paid' => ['success', $tx->purpose === 'wallet_topup' ? 'Wallet funded — '.Present::money($tx->amount_minor).' added.' : 'Payment confirmed.'],
             'failed' => ['error', 'Payment didn’t go through. Nothing was charged for these items — you can try again.'],
             default => ['success', 'We’re confirming your payment — this page will update shortly.'],
         };
@@ -37,6 +37,7 @@ class PaymentController extends Controller
                 ? route('orders.show', $o->first()) : route('orders.index'),
             'membership' => route('membership.index'),
             'sponsored' => route('sell.insights'),
+            'wallet_topup' => route('wallet.index'),
             default => route('home'),
         };
 

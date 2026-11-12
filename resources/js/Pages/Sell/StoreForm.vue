@@ -1,11 +1,13 @@
 <script setup>
 import { Link, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { Camera, ImagePlus, Instagram, MessageCircle, X } from 'lucide-vue-next';
+import { Camera, ImagePlus, Instagram, MapPin, MessageCircle, X } from 'lucide-vue-next';
 import AppShell from '@/Layouts/AppShell.vue';
 import SeoHead from '@/Components/SeoHead.vue';
 import Avatar from '@/Components/Avatar.vue';
 import InputError from '@/Components/InputError.vue';
+import ShopCamera from '@/Components/ShopCamera.vue';
+import ShopLocationPicker from '@/Components/ShopLocationPicker.vue';
 
 const props = defineProps({ store: Object, suggestedSlug: String, states: Array, seo: Object });
 const editing = computed(() => !!props.store);
@@ -25,7 +27,34 @@ const form = useForm({
     cover: null,
     remove_logo: false,
     remove_cover: false,
+    photos: [],
+    remove_photos: [],
 });
+
+// GPS pin (optional): only sent once confirmed on the map.
+const pinned = ref({
+    lat: props.store?.location?.lat ?? null,
+    lng: props.store?.location?.lng ?? null,
+    accuracy: null,
+    confirmed: false,
+    cleared: false,
+});
+function onArea(area) {
+    if (area?.city && !form.city) form.city = area.city;
+    if (area?.state && !form.state) form.state = area.state;
+}
+
+// Shop photos: saved ones (removable) + new live-camera shots.
+const savedPhotos = ref([...(props.store?.photos ?? [])]);
+const camera = ref(false);
+const shotUrls = computed(() => form.photos.map((f) => URL.createObjectURL(f)));
+function removeSaved(ph) {
+    savedPhotos.value = savedPhotos.value.filter((p) => p.id !== ph.id);
+    form.remove_photos.push(ph.id);
+}
+function removeShot(i) {
+    form.photos = form.photos.filter((_, k) => k !== i);
+}
 
 const logoPreview = ref(props.store?.logo ?? null);
 const coverPreview = ref(props.store?.cover ?? null);
@@ -51,10 +80,17 @@ function clear(field) {
     (field === 'logo' ? logoPreview : coverPreview).value = null;
 }
 const initials = computed(() => (form.name || '?').charAt(0).toUpperCase());
-const host = computed(() => route('home').replace(/^https?:\/\//, '').replace(/\/home$/, ''));
+const host = computed(() => route('landing').replace(/^https?:\/\//, '').replace(/\/$/, ''));
 
 function submit() {
-    form.transform((d) => ({ ...d, remove_logo: d.remove_logo ? 1 : 0, remove_cover: d.remove_cover ? 1 : 0 }))
+    const pin = pinned.value;
+    form.transform((d) => ({
+        ...d,
+        remove_logo: d.remove_logo ? 1 : 0,
+        remove_cover: d.remove_cover ? 1 : 0,
+        ...(pin.confirmed ? { lat: pin.lat, lng: pin.lng, location_accuracy_m: pin.accuracy || '', location_confirmed: 1 } : {}),
+        ...(pin.cleared ? { clear_location: 1 } : {}),
+    }))
         .post(editing.value ? route('sell.store.update') : route('sell.store.store'), { forceFormData: true, preserveScroll: true });
 }
 </script>
@@ -146,6 +182,38 @@ function submit() {
                     <input id="instagram" v-model="form.instagram" class="input" placeholder="@yourstore" />
                     <InputError :message="form.errors.instagram" />
                 </div>
+            </section>
+
+            <section class="surface space-y-4 p-5 md:p-6">
+                <h2 class="flex items-center gap-2 font-display text-base font-bold"><MapPin :size="17" class="text-brand-600" /> Shop location</h2>
+                <ShopLocationPicker v-model="pinned" @area="onArea" />
+                <InputError :message="form.errors.lat || form.errors.lng" />
+            </section>
+
+            <section class="surface space-y-4 p-5 md:p-6">
+                <div class="flex items-center gap-2">
+                    <h2 class="flex items-center gap-2 font-display text-base font-bold"><Camera :size="17" class="text-brand-600" /> Shop photos</h2>
+                    <span class="ml-auto text-sm font-semibold tabular-nums text-ink-500">{{ savedPhotos.length + form.photos.length }} / 10</span>
+                </div>
+                <div class="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                    <div v-for="ph in savedPhotos" :key="`s${ph.id}`" class="relative aspect-square overflow-hidden rounded-2xl bg-ink-100">
+                        <img :src="ph.url" alt="" class="h-full w-full object-cover" />
+                        <button type="button" class="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white" aria-label="Remove photo" @click="removeSaved(ph)"><X :size="14" /></button>
+                    </div>
+                    <div v-for="(src, i) in shotUrls" :key="src" class="relative aspect-square overflow-hidden rounded-2xl bg-ink-100 ring-2 ring-brand-300">
+                        <img :src="src" alt="" class="h-full w-full object-cover" />
+                        <button type="button" class="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white" aria-label="Remove photo" @click="removeShot(i)"><X :size="14" /></button>
+                    </div>
+                    <button
+                        v-if="savedPhotos.length + form.photos.length < 10"
+                        type="button"
+                        class="flex aspect-square items-center justify-center rounded-2xl border-2 border-dashed border-ink-200 text-ink-500 transition hover:border-brand-400 hover:text-brand-600"
+                        aria-label="Open camera"
+                        @click="camera = true"
+                    ><Camera :size="24" /></button>
+                </div>
+                <InputError :message="form.errors.photos || Object.entries(form.errors).find(([k]) => k.startsWith('photos.'))?.[1]" />
+                <ShopCamera v-model="form.photos" :show="camera" :existing="savedPhotos.length" :max="10" @close="camera = false" />
             </section>
 
             <div class="sticky bottom-[calc(4.75rem+var(--safe-bottom))] z-20 flex gap-3 rounded-3xl border border-ink-200/70 bg-white/90 p-3 shadow-lift backdrop-blur md:static md:border-0 md:bg-transparent md:p-0 md:shadow-none">

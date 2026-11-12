@@ -1,7 +1,7 @@
 <script setup>
 import { Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { BadgeCheck, Instagram, MapPin, PackageOpen, Pencil, Plus, Share2 } from 'lucide-vue-next';
+import { BadgeCheck, Instagram, MapPin, Navigation, PackageOpen, Pencil, Plus, Share2, X } from 'lucide-vue-next';
 import ProfileHero from '@/Components/ProfileHero.vue';
 import ReachOut from '@/Components/ReachOut.vue';
 import Tip from '@/Components/Tip.vue';
@@ -20,6 +20,8 @@ const url = computed(() => route('stores.show', props.store.slug));
 const wa = computed(() => waLink(props.store.whatsapp, `Hi ${props.store.name}! I found your store on neaby: ${url.value}`));
 const sharing = ref(false);
 function share() { sharing.value = true; }
+const directions = computed(() => (props.store.location ? `https://www.google.com/maps/dir/?api=1&destination=${props.store.location.lat},${props.store.location.lng}` : null));
+const viewing = ref(null); // index of the shop photo open full-screen
 </script>
 
 <template>
@@ -42,6 +44,7 @@ function share() { sharing.value = true; }
             </template>
             <template #meta>
                 <span v-if="store.city || store.state" class="inline-flex items-center gap-1"><MapPin :size="13" /> {{ [store.city, store.state].filter(Boolean).join(', ') }}</span>
+                <a v-if="store.location" :href="directions" target="_blank" rel="noopener" class="inline-flex items-center gap-1 font-semibold text-brand-700 hover:underline"><Navigation :size="13" /> {{ store.travel || 'Directions' }}</a>
                 <span><b class="font-bold text-ink-800">{{ store.products_count }}</b> items</span>
                 <span>Joined {{ store.joined }}</span>
             </template>
@@ -49,6 +52,19 @@ function share() { sharing.value = true; }
                 <p v-if="store.description" class="mt-1 line-clamp-4 max-w-3xl whitespace-pre-line text-[13.5px] leading-relaxed text-ink-600">{{ store.description }}</p>
             </template>
         </ProfileHero>
+
+        <!-- Shop photos (live-camera captures of the shop front + surroundings) -->
+        <section v-if="store.photos?.length" class="no-scrollbar -mx-3 mt-6 flex gap-2 overflow-x-auto px-3 sm:mx-0 sm:px-0" aria-label="Shop photos">
+            <button v-for="(ph, i) in store.photos" :key="ph.id" class="h-28 w-36 shrink-0 overflow-hidden rounded-2xl bg-ink-100 ring-1 ring-ink-200/60 transition hover:opacity-90 md:h-36 md:w-48" :aria-label="`Shop photo ${i + 1}`" @click="viewing = i">
+                <img :src="ph.url" alt="" class="h-full w-full object-cover" loading="lazy" decoding="async" />
+            </button>
+        </section>
+        <Teleport to="body">
+            <div v-if="viewing !== null" class="fixed inset-0 z-[70] flex items-center justify-center bg-ink-950/90 p-4 backdrop-blur" role="dialog" aria-modal="true" @click.self="viewing = null" @keydown.esc="viewing = null">
+                <img :src="store.photos[viewing].url" alt="" class="max-h-full max-w-full rounded-2xl object-contain" />
+                <button class="immersive-btn absolute right-4 top-[calc(env(safe-area-inset-top)+16px)] h-10 w-10" aria-label="Close" @click="viewing = null"><X :size="20" /></button>
+            </div>
+        </Teleport>
 
         <div v-if="store.status !== 'active'" class="mt-6 rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-800">This store is suspended and hidden from the public.</div>
 

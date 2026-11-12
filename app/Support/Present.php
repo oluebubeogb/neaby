@@ -7,6 +7,8 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\Store;
 use App\Models\User;
+use App\Services\Geo\Near;
+use App\Services\Geo\Proximity;
 use Illuminate\Support\Str;
 
 /**
@@ -15,6 +17,9 @@ use Illuminate\Support\Str;
  */
 class Present
 {
+    /** Store columns every product card needs (incl. location for nearby ranking + travel labels). */
+    public const STORE_CARD_COLUMNS = 'id,name,slug,logo_path,accent,status,city,state,lat,lng,location_confirmed_at';
+
     private static function store(): ObjectStore
     {
         return app(ObjectStore::class);
@@ -60,6 +65,8 @@ class Present
                 'logo' => self::store()->url($p->store->logo_path),
                 'accent' => $p->store->accent,
             ] : null,
+            // "4 min walk" / "12 min drive" / "About 2 hr away" — only for GPS-pinned stores when the shopper shared a location.
+            'travel' => $p->relationLoaded('store') ? self::travel($p->store) : null,
             'category' => $p->relationLoaded('category') && $p->category ? [
                 'name' => $p->category->name,
                 'slug' => $p->category->slug,
@@ -167,7 +174,14 @@ class Present
             'products_count' => $s->products_count ?? null,
             'initials' => mb_strtoupper(mb_substr($s->name, 0, 1)),
             'joined' => $s->created_at?->format('M Y'),
+            'has_gps' => $s->hasGps(),
+            'travel' => self::travel($s),
         ];
+    }
+
+    public static function travel(?Store $s): ?string
+    {
+        return $s && $s->hasGps() ? Proximity::label(Near::current(), $s) : null;
     }
 
     public static function storeDetail(Store $s): array
@@ -176,6 +190,9 @@ class Present
             'description' => $s->description,
             'status' => $s->status,
             'owner' => $s->owner ? ['username' => $s->owner->username, 'name' => $s->owner->name] : null,
+            'photos' => $s->photos->sortBy(['sort', 'id'])->map(fn ($ph) => ['id' => $ph->id, 'url' => self::store()->url($ph->path)])->values(),
+            // Exact pin is shown to shoppers only once the owner confirmed it.
+            'location' => $s->hasGps() ? ['lat' => $s->lat, 'lng' => $s->lng] : null,
         ]);
     }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CartItem;
 use App\Models\Product;
 use App\Services\Commerce\CheckoutService;
+use App\Services\Wallet\WalletService;
 use App\Services\Growth\Engagement;
 use App\Support\NigeriaStates;
 use App\Support\Present;
@@ -54,6 +55,8 @@ class CartController extends Controller
             'delivery' => Present::money($delivery),
             'total_delivery' => Present::money($subtotal + $delivery),
             'total_pickup' => Present::money($subtotal),
+            'total_delivery_minor' => $subtotal + $delivery,
+            'total_pickup_minor' => $subtotal,
             'pickup_ok' => $groups->every(fn ($g) => $g['pickup_ok']),
             'all_ok' => $groups->every(fn ($g) => collect($g['items'])->every(fn ($i) => $i['ok'])),
         ];
@@ -131,6 +134,10 @@ class CartController extends Controller
             'defaults' => ['contact_name' => $u->name, 'contact_phone' => $u->store?->whatsapp ?? '', 'city' => $u->store?->city ?? '', 'state' => $u->store?->state ?? ''],
             'states' => NigeriaStates::all(),
             'provider' => config('payments.default'),
+            'wallet' => config('neaby.wallet.enabled', true) ? [
+                'available_minor' => ($w = app(WalletService::class)->for($u))->available(),
+                'available' => Present::money($w->available()),
+            ] : null,
             'seo' => $seo,
         ])->withViewData(['seo' => $seo]);
     }
@@ -146,8 +153,14 @@ class CartController extends Controller
             'city' => ['required_if:delivery_method,delivery', 'nullable', 'string', 'max:80'],
             'state' => ['required_if:delivery_method,delivery', 'nullable', Rule::in(NigeriaStates::all())],
             'note' => ['nullable', 'string', 'max:500'],
+            'use_wallet' => ['nullable', 'boolean'],
         ]);
         $result = $this->checkout->placeOrders($request->user(), $data);
+
+        // Paid in full from the wallet: no gateway hop.
+        if ($result['paid']) {
+            return redirect($result['checkout_url'])->with('success', 'Paid from your wallet — order confirmed.');
+        }
 
         return Inertia::location($result['checkout_url']);
     }

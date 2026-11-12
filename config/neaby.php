@@ -31,6 +31,14 @@ return [
     // Email copies of order / membership / supplier-request notices (Inbox always gets them).
     'mail_notifications' => (bool) env('NEABY_MAIL_NOTIFICATIONS', true),
 
+    // In-app wallet (funded through the payment gateway; amounts in kobo).
+    'wallet' => [
+        'enabled' => (bool) env('NEABY_WALLET_ENABLED', true),
+        'min_topup_minor' => (int) env('NEABY_WALLET_MIN_TOPUP', 100) * 100,        // ₦100
+        'max_topup_minor' => (int) env('NEABY_WALLET_MAX_TOPUP', 1000000) * 100,    // ₦1,000,000 per top-up
+        'max_balance_minor' => (int) env('NEABY_WALLET_MAX_BALANCE', 5000000) * 100, // ₦5,000,000 cap (0 = none)
+    ],
+
     // Phase 4 — ordinary checkout.
     'checkout' => [
         'enabled' => (bool) env('NEABY_CHECKOUT_ENABLED', true),
@@ -78,7 +86,9 @@ return [
     'rtc' => [
         'calls_enabled' => (bool) env('NEABY_CALLS_ENABLED', true),
         'stun_urls' => array_values(array_filter(array_map('trim', explode(',', (string) env('NEABY_STUN_URLS', 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302'))))),
-        'turn_url' => env('NEABY_TURN_URL'), // e.g. turn:turn.example.com:3478?transport=udp (comma-separate several)
+        // coturn — set on the server; required in production. Comma-separate several, e.g.
+        // turn:<host>:3478?transport=udp,turn:<host>:3478?transport=tcp,turns:<host>:5349?transport=tcp
+        'turn_url' => env('NEABY_TURN_URL'),
         'turn_username' => env('NEABY_TURN_USERNAME'),
         'turn_credential' => env('NEABY_TURN_CREDENTIAL'),
         'ring_seconds' => (int) env('NEABY_CALL_RING_SECONDS', 40),

@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\Product;
+use App\Services\Geo\Near;
+use App\Services\Geo\Proximity;
 use App\Support\Present;
 use App\Support\Seo;
 use Inertia\Inertia;
@@ -26,11 +28,16 @@ class CategoryController extends Controller
     {
         abort_unless($category->is_active, 404);
 
-        $products = Product::query()->published()
-            ->where('category_id', $category->id)
-            ->with(['cover', 'store:id,name,slug,logo_path,accent,status', 'category:id,name,slug'])
-            ->latest('published_at')
-            ->paginate(24);
+        $query = Product::query()->published()->select('products.*')
+            ->where('products.category_id', $category->id)
+            ->with(['cover', 'store:'.Present::STORE_CARD_COLUMNS, 'category:id,name,slug']);
+        // Nearby stock first when the shopper shared a location; everything else still listed.
+        if ($near = Near::current()) {
+            [$tierSql, $tierBindings] = Proximity::tierSql($near, 'geo_store');
+            $query->leftJoin('stores as geo_store', 'geo_store.id', '=', 'products.store_id')
+                ->orderByRaw("{$tierSql} asc", $tierBindings);
+        }
+        $products = $query->latest('products.published_at')->orderByDesc('products.id')->paginate(24);
 
         $seo = Seo::make($category->name, "Shop {$category->name} from independent stores on neaby.", canonical: route('categories.show', $category));
 

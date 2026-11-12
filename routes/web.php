@@ -14,7 +14,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\FeedController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\InboxController;
-use App\Http\Controllers\LandingController;
+use App\Http\Controllers\LocationController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\Messaging\CallsController;
@@ -26,14 +26,23 @@ use App\Http\Controllers\SearchController;
 use App\Http\Controllers\Sell;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\StorefrontController;
+use App\Http\Controllers\WalletController;
 use Illuminate\Support\Facades\Route;
 
 /*
 | Public — visitors browse freely without an account.
 */
-Route::get('/', LandingController::class)->name('landing');
+// `/` IS the For You feed (same controller, props and page as /home — not a redirect).
+// The route keeps the name `landing` so existing route('landing') links still resolve.
+Route::get('/', FeedController::class)->name('landing');
 Route::get('/home', FeedController::class)->name('home');
 Route::get('/search', SearchController::class)->name('search');
+// In-place search (immersive viewer): JSON product cards, same ranking as /search.
+Route::get('/search/json', [SearchController::class, 'json'])->middleware('throttle:60,1')->name('search.json');
+// Shopper location for nearby-first ranking (session; saved on the account when signed in).
+Route::post('/location', [LocationController::class, 'store'])->middleware('throttle:20,1')->name('location.store');
+Route::get('/location/area', [LocationController::class, 'area'])->middleware('throttle:30,1')->name('location.area');
+Route::delete('/location', [LocationController::class, 'destroy'])->middleware('throttle:20,1')->name('location.destroy');
 Route::get('/categories', [CategoryController::class, 'index'])->name('categories.index');
 Route::get('/c/{category:slug}', [CategoryController::class, 'show'])->name('categories.show');
 Route::get('/p/{product:slug}', [ProductController::class, 'show'])->name('products.show');
@@ -95,6 +104,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
     Route::post('/orders/{order}/confirm', [OrderController::class, 'confirm'])->name('orders.confirm');
+
+    // Wallet: fund from neaby (gateway hosted checkout), balance + history.
+    Route::get('/wallet', [WalletController::class, 'index'])->name('wallet.index');
+    Route::post('/wallet/fund', [WalletController::class, 'fund'])->middleware('throttle:checkout')->name('wallet.fund');
 
     // Payments (return URL + local fake sandbox)
     Route::get('/payments/return', [PaymentController::class, 'back'])->name('payments.return');

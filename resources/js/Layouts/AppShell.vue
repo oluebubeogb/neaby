@@ -45,7 +45,7 @@ function submitSearch() {
 
         <!-- ───────── Tablet rail (md) ───────── -->
         <aside class="fixed inset-y-0 left-0 z-40 hidden w-[var(--nav-rail)] flex-col items-center border-r border-ink-200/70 bg-white/80 py-4 backdrop-blur-xl md:flex lg:hidden">
-            <Link :href="route('home')" class="mb-6" aria-label="neaby home"><Monogram :size="42" /></Link>
+            <Link :href="route('landing')" class="mb-6" aria-label="neaby home"><Monogram :size="42" /></Link>
             <nav class="flex flex-1 flex-col items-center gap-1.5">
                 <Link
                     v-for="item in [...nav, ...extra]"
@@ -76,7 +76,7 @@ function submitSearch() {
             :class="collapsed ? 'w-[var(--nav-rail)]' : 'w-[var(--nav-sidebar)]'"
         >
             <div class="flex shrink-0 items-center px-4" :class="collapsed ? 'h-auto flex-col gap-2 pb-2 pt-3' : 'h-16 justify-between'">
-                <Link :href="route('home')" aria-label="neaby home" class="flex items-center">
+                <Link :href="route('landing')" aria-label="neaby home" class="flex items-center">
                     <Monogram v-if="collapsed" :size="38" />
                     <Wordmark v-else size="md" class="pl-1" />
                 </Link>
@@ -172,7 +172,7 @@ function submitSearch() {
                     <Link v-if="back" :href="back" class="icon-btn -ml-1" aria-label="Back">
                         <ArrowLeft :size="20" />
                     </Link>
-                    <Link v-if="!title" :href="route('home')" class="pl-1"><Wordmark size="sm" /></Link>
+                    <Link v-if="!title" :href="route('landing')" class="pl-1"><Wordmark size="sm" /></Link>
                     <h1 v-else class="truncate font-display text-[17px] font-bold">{{ title }}</h1>
                     <div class="ml-auto flex items-center gap-1">
                         <slot name="mobile-actions" />

@@ -13,8 +13,8 @@ class SitemapController extends Controller
     {
         $xml = Cache::remember('sitemap.xml', now()->addMinutes(30), function () {
             $urls = [
-                ['loc' => url('/'), 'changefreq' => 'daily', 'priority' => '1.0'],
-                ['loc' => route('home'), 'changefreq' => 'hourly', 'priority' => '0.9'],
+                // `/` is the For You feed (canonical; /home is the same page).
+                ['loc' => url('/'), 'changefreq' => 'hourly', 'priority' => '1.0'],
                 ['loc' => route('categories.index'), 'changefreq' => 'weekly', 'priority' => '0.6'],
             ];
 

@@ -12,8 +12,9 @@ import ProductGrid from '@/Components/ProductGrid.vue';
 import StoreChip from '@/Components/StoreChip.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import Pager from '@/Components/Pager.vue';
+import NearMe from '@/Components/NearMe.vue';
 
-const props = defineProps({ filters: Object, results: Object, stores: Array, states: Array, seo: Object });
+const props = defineProps({ filters: Object, results: Object, stores: Array, states: Array, nearby: Boolean, seo: Object });
 
 const f = reactive({ ...props.filters });
 const showFilters = ref(false);
@@ -121,6 +122,7 @@ function clearAll() {
 
                     <div class="mb-4 flex items-center justify-between gap-3">
                         <p class="text-sm text-ink-500"><span class="font-semibold text-ink-900">{{ results.total }}</span> {{ results.total === 1 ? 'result' : 'results' }}<template v-if="filters.q"> for “{{ filters.q }}”</template></p>
+                        <NearMe class="ml-auto" />
                         <select v-model="f.sort" class="rounded-full border-ink-200 bg-white py-2 pl-3 pr-8 text-sm font-medium focus:border-brand-400 focus:ring-brand-100" @change="apply()">
                             <option v-for="(label, key) in sorts" :key="key" :value="key">{{ label }}</option>
                         </select>

@@ -15,7 +15,7 @@ categories and a personalised For You feed. Buyers chat sellers on WhatsApp **or
 | Data | PostgreSQL 15+ (full-text search + `pg_trgm`), Redis (cache + queue) |
 | Workers | Queue worker + scheduler run as s6 services inside the same image (`docker/s6/`) |
 | Uploads | VPS disk via `App\Contracts\ObjectStore` (`LocalObjectStore` now, S3 later) |
-| Payments | `App\Contracts\PaymentProvider`: `FakePaymentProvider` (default) + `MonnifyPaymentProvider` |
+| Payments | `App\Contracts\PaymentProvider`: `MonnifyPaymentProvider` (production default, live API) + `FakePaymentProvider` (dev/tests) |
 | AI titles | `App\Contracts\ListingAi`: `FakeListingAi` (offline, no key) / OpenAI-compatible / null |
 | Fonts | Self-hosted Inter + Plus Jakarta Sans; **Comfortaa 700** for the lowercase `neaby` wordmark (`public/fonts/comfortaa-700.woff2`, `resources/fonts/Comfortaa-Bold.ttf`, SIL OFL 1.1) — used on the web (`font-brand`), in every mail template and in generated share-card PNGs |
 
@@ -33,11 +33,13 @@ app/
   Contracts/            ObjectStore, PaymentProvider, ListingAi  (swap-able drivers)
   Services/
     Storage/            LocalObjectStore (public disk on the VPS)
-    Payments/           PaymentManager, FakePaymentProvider, MonnifyPaymentProvider (skeleton)
+    Payments/           PaymentManager, FakePaymentProvider, MonnifyPaymentProvider (live default)
     Ai/                 FakeListingAi, OpenAiCompatibleListingAi, NullListingAi
-    Search/             CatalogueSearch  (websearch_to_tsquery + ILIKE + trigram)
-    Feed/               ForYouFeed       (category affinity + freshness + popularity)
-  Http/Controllers/     Landing, Feed(/home), Search, Category, Product, Storefront,
+    Search/             CatalogueSearch + SearchTerms (multi-word OR, plural folding, per-token tsquery + ILIKE)
+    Feed/               ForYouFeed       (category affinity + freshness + popularity + nearby boost)
+    Geo/                Near (shopper location), Proximity (distance tiers, travel labels)
+    Wallet/             WalletService    (ledger, holds, top-ups, refunds to wallet)
+  Http/Controllers/     Feed(/ and /home), Search, Location, Wallet, Category, Product, Storefront,
                         PublicProfile, Inbox, Sitemap, Health, PaymentWebhook,
                         Sell/* (dashboard, store, products, AI), Admin/* (moderation)
   Models/               User, Store, Product, ProductImage, Category, ProductView, AuditLog, PaymentTransaction, PaymentWebhookEvent
@@ -50,7 +52,7 @@ resources/js/
                         248px ⇄ 76px collapsible sidebar (desktop)
   Layouts/AuthLayout.vue
   Components/           Wordmark, IconCircle, ProductCard/Grid, StoreChip, PasswordInput (eye toggle), SeoHead, …
-  Pages/                Landing, Home, Search, Categories/*, Products/Show, Stores/Show, Users/Show,
+  Pages/                Home (served at / and /home), Wallet, Search, Categories/*, Products/Show, Stores/Show, Users/Show,
                         Sell/{Start,Dashboard,StoreForm,ProductForm}, Inbox, Profile/*, Admin/*, Auth/*
 resources/views/app.blade.php   server-rendered <title>/meta/OG/JSON-LD for every page
 public/                 favicon.svg/.ico, apple-touch-icon, icon-192/512, site.webmanifest, og-default.png
@@ -63,9 +65,12 @@ docker-compose.yml      LOCAL DEV ONLY: postgres:17 + redis:7
 
 | Path | What |
 |---|---|
-| `/` | Landing (signed-in users are redirected to `/home`) |
-| `/home` | For You feed (infinite scroll, category chips) |
-| `/search?q=` | Full-text + ILIKE search, filters (category, condition, price, state), sort |
+| `/` | For You feed — the landing page **is** the feed (same controller/props/page as `/home`, not a redirect; canonical URL) |
+| `/home` | Same For You feed (kept for old links) |
+| `/search?q=` | Multi-word search (any word matches, plurals folded, more words matched ranks first), filters, sort; nearby first when location is shared |
+| `GET /search/json?q=&page=` | Same search as JSON feed cards — used by the immersive viewer's in-place search (60/min) |
+| `POST /location`, `DELETE /location`, `GET /location/area` | Shopper location for nearby-first ranking (session + account), nearest-town lookup |
+| `/wallet`, `POST /wallet/fund` | Wallet balance + history; fund from neaby via the gateway |
 | `/categories`, `/c/{slug}` | Category index / listing |
 | `/p/{slug}` | Public SEO product page (JSON-LD `Product`) |
 | `/s/{slug}` | Public store page |
@@ -228,10 +233,11 @@ and `php artisan storage:link`. Uploads up to 100 MB per request are allowed by 
 | `NEABY_DEMO_PHOTOS` | | `true` | Demo seed downloads ~10 MB of real photos; `false` = offline placeholders only |
 | `LISTING_AI_DRIVER` | | `fake` | `fake` (offline) · `openai` · `null` |
 | `LISTING_AI_BASE_URL` `LISTING_AI_API_KEY` `LISTING_AI_MODEL` | | | Only for `openai` (any OpenAI-compatible API) |
-| `PAYMENT_PROVIDER` | | `fake` | `fake` · `monnify` (see below) |
-| `PAYMENT_FAKE_SANDBOX` | | `true` | Enables the TEST MODE pay page for `fake` |
-| `MONNIFY_BASE_URL` | | `https://sandbox.monnify.com` | Live: `https://api.monnify.com` |
-| `MONNIFY_API_KEY` `MONNIFY_SECRET_KEY` `MONNIFY_CONTRACT_CODE` | for monnify | | From the Monnify dashboard |
+| `PAYMENT_PROVIDER` | | `monnify` | `monnify` (production) · `fake` (local dev / tests only) |
+| `PAYMENT_FAKE_SANDBOX` | | `false` | Enables the TEST MODE pay page for `fake` |
+| `MONNIFY_BASE_URL` | | `https://api.monnify.com` | Live API. Sandbox account: `https://sandbox.monnify.com` |
+| `MONNIFY_API_KEY` `MONNIFY_SECRET_KEY` `MONNIFY_CONTRACT_CODE` | **prod: yes** | | From the Monnify dashboard (set on the server only) |
+| `NEABY_WALLET_ENABLED` `NEABY_WALLET_MIN_TOPUP` `NEABY_WALLET_MAX_TOPUP` `NEABY_WALLET_MAX_BALANCE` | | `true` · `100` · `1000000` · `5000000` | Wallet switch and limits (whole naira) |
 | `NEABY_MAIL_NOTIFICATIONS` | | `true` | Email important notices (orders, memberships, requests) |
 | `NEABY_CHECKOUT_ENABLED` | | `true` | Master switch for cart/checkout |
 | `NEABY_RESERVATION_MINUTES` | | `30` | Stock held while a checkout is unpaid |
@@ -255,7 +261,7 @@ and `php artisan storage:link`. Uploads up to 100 MB per request are allowed by 
 | `NEABY_CHAT_POLL_SECONDS` `NEABY_CHAT_PULSE_SECONDS` | | `4` / `10` | Open-thread poll / global unread + incoming-call pulse. Paused while the tab is hidden |
 | `NEABY_CALLS_ENABLED` | | `true` | WebRTC voice calls |
 | `NEABY_STUN_URLS` | | Google STUN | Comma-separated |
-| `NEABY_TURN_URL` `NEABY_TURN_USERNAME` `NEABY_TURN_CREDENTIAL` | prod: recommended | `turn:turn.example.com:3478?transport=udp` | TURN relay (coturn). Without it calls fail between strict/symmetric NATs |
+| `NEABY_TURN_URL` `NEABY_TURN_USERNAME` `NEABY_TURN_CREDENTIAL` | **prod: yes** | `turn:<host>:3478?transport=udp,turn:<host>:3478?transport=tcp` | coturn relay. Empty in production → hourly warning in the log; calls fall back to STUN only |
 | `NEABY_CALL_RING_SECONDS` | | `40` | Then the call is marked missed |
 | `NEABY_QR_MAX_ACTIVE_PER_STORE` | | `100` | Live seller QR codes per store |
 | `NEABY_QR_MAX_DISCOUNT_PERCENT` | | `90` | Cap for % and ₦ discounts on QR codes |
@@ -271,17 +277,25 @@ and `php artisan storage:link`. Uploads up to 100 MB per request are allowed by 
   resolved settings (password hidden) and the exact SMTP error if sending fails.
 - After changing `MAIL_*` in Coolify, redeploy (config is cached on boot).
 
-## Payments: fake vs Monnify
+## Payments: Monnify (production) and the wallet
 
-- **`PAYMENT_PROVIDER=fake` (default)** — no money moves. Checkout, memberships and sponsored listings
-  redirect to `/payments/fake/{ref}` (yellow TEST MODE banner) where you mark the payment paid/failed.
-  Everything downstream (order paid, stock deducted, membership active, placement live) runs for real.
-- **`PAYMENT_PROVIDER=monnify`** — set `MONNIFY_API_KEY`, `MONNIFY_SECRET_KEY`, `MONNIFY_CONTRACT_CODE`
-  and `MONNIFY_BASE_URL`. Buyers are sent to Monnify's hosted checkout and returned to `/payments/return`;
-  payment is confirmed by server-side verification **and** the webhook. In the Monnify dashboard set the
-  webhook URL to `https://<your-domain>/webhooks/payments/monnify`. Set `PAYMENT_FAKE_SANDBOX=false`.
-- Refunds are recorded in neaby (`/admin/refunds`); with Monnify, issue the refund in the Monnify
-  dashboard and then mark it processed.
+- **Production = Monnify live** (`PAYMENT_PROVIDER=monnify`, `MONNIFY_BASE_URL=https://api.monnify.com`,
+  `PAYMENT_FAKE_SANDBOX=false` — all defaults). Set `MONNIFY_API_KEY`, `MONNIFY_SECRET_KEY` and
+  `MONNIFY_CONTRACT_CODE` in the server `.env` (never in Git). Buyers are sent to Monnify's hosted checkout
+  and returned to `/payments/return`; payment is confirmed by server-side verification **and** the webhook.
+  In the Monnify dashboard set the webhook URL to `https://<your-domain>/webhooks/payments/monnify`.
+- **`PAYMENT_PROVIDER=fake`** — local dev / tests only (`phpunit.xml` sets it). No money moves; with
+  `PAYMENT_FAKE_SANDBOX=true` payments go to `/payments/fake/{ref}` (TEST MODE) to mark paid/failed.
+- **Wallet** — funding always starts in neaby: Wallet → Fund → amount → Monnify hosted checkout → verified
+  return/webhook → the wallet is credited (purpose `wallet_topup`). Monnify is only the gateway. Ledger rows
+  (`wallet_transactions`) have unique references, so webhook/return replays never double-credit; every
+  balance change locks the wallet row.
+- **Checkout** — pay from the wallet (debited immediately when it covers the total, no gateway), pay on the
+  go (Monnify), or split: the wallet part is **held**, Monnify charges the rest, and the hold is captured only
+  when that payment is verified; if it fails/expires the hold is released (`neaby:wallet:reconcile`, every
+  10 min, re-verifies abandoned split checkouts).
+- **Refunds** — the wallet-paid part of an order is returned to the buyer's wallet instantly. The card/transfer
+  part is recorded in `/admin/refunds`; issue it in the Monnify dashboard and then mark it processed.
 
 ## Messaging, calls and QR commerce
 
@@ -293,7 +307,9 @@ and `php artisan storage:link`. Uploads up to 100 MB per request are allowed by 
 - **Voice calls** — 1:1 WebRTC audio (mono Opus capped at 24 kbps, DTX, echo cancellation). Signalling
   (offer/answer/ICE) goes over plain HTTP polling and is deleted when the call ends; a call record
   ("Voice call · 02:13", "Missed voice call") is left in the thread. Media is peer-to-peer.
-  STUN works on most home/mobile networks; **production should add a TURN server**, e.g. coturn:
+  STUN works on most home/mobile networks; **production uses coturn from env** (`NEABY_TURN_URL`,
+  `NEABY_TURN_USERNAME`, `NEABY_TURN_CREDENTIAL` — set on the server; if they're empty in production neaby logs
+  a warning at most hourly and calls fall back to STUN). Example coturn config:
   ```
   # /etc/turnserver.conf (minimal)
   listening-port=3478
@@ -411,7 +427,18 @@ Every demo email is verified. Example: email `neaby1@beuden.com.ng`, password `n
    the `NEABY_SEED_DEMO` block in `docker-entrypoint.sh`, the `NeabyDemoSeeder` lines in
    `database/seeders/DatabaseSeeder.php`, the `NEABY_SEED_DEMO` lines in `.env.example`, and this README section.
 
+## Location, nearby-first and shop photos
+
+- Shoppers tap **Near me** (feed / search). Only then does the browser ask for location; the fix is kept in
+  the session, on the account when signed in, and in `localStorage`. Denied → nothing changes.
+- Search, For You and category listings rank nearby stock first: GPS-pinned stores by real distance, others by
+  their city's centre (offline table in `App\Support\NigeriaCities`), then same state, then everything else.
+- Store settings → **Pin my shop's exact location** (GPS, map preview, confirm) and **Shop photos** (live
+  rear camera, tap to capture, up to 10). Pinned stores show travel labels like `4 min walk`,
+  `12 min drive` or `About 2 hr away` (straight line × 1.3, walk 5 km/h, city driving 25–35 km/h).
+
 ## Checks
 
+- `php artisan test` — feature/unit tests (SQLite in-memory; search, nearby ranking, wallet, store GPS/photos).
 - `npm run build` — Vite production build (JS only; there is no TypeScript, so no `tsc` step).
 - `php artisan route:list`

@@ -144,6 +144,9 @@ class CallsController extends Controller
                 'username' => config('neaby.rtc.turn_username'),
                 'credential' => config('neaby.rtc.turn_credential'),
             ]);
+        } elseif (app()->environment('production') && \Illuminate\Support\Facades\Cache::add('neaby:warn:turn-missing', 1, now()->addHour())) {
+            // Don't crash — calls still try STUN — but make the gap visible (at most hourly).
+            \Illuminate\Support\Facades\Log::warning('NEABY_TURN_URL is not set in production: voice calls behind strict NATs will fail. Set NEABY_TURN_URL / NEABY_TURN_USERNAME / NEABY_TURN_CREDENTIAL (coturn).');
         }
 
         return $servers;

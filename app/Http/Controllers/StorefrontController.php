@@ -41,10 +41,11 @@ class StorefrontController extends Controller
             ->selectRaw('categories.name, categories.slug, count(*) as c')
             ->groupBy('categories.name', 'categories.slug')->orderByDesc('c')->get();
 
+        [$cardImage, $cardSize] = Seo::card('share.store', $store, $request->query('card'));
         $seo = Seo::make(
             $store->name,
             $store->tagline ?: Present::excerpt($store->description) ?: "Shop {$store->name} on neaby.",
-            $store->isActive() ? route('share.store', $store) : (Present::storeCard($store)['cover'] ?? Present::storeCard($store)['logo']),
+            $store->isActive() ? $cardImage : (Present::storeCard($store)['cover'] ?? Present::storeCard($store)['logo']),
             route('stores.show', $store),
             jsonLd: [
                 '@context' => 'https://schema.org',
@@ -54,6 +55,7 @@ class StorefrontController extends Controller
                 'address' => array_filter(['@type' => 'PostalAddress', 'addressLocality' => $store->city, 'addressRegion' => $store->state, 'addressCountry' => 'NG']),
             ],
             index: $store->isActive(),
+            imageSize: $store->isActive() ? $cardSize : null,
         );
 
         return Inertia::render('Stores/Show', [

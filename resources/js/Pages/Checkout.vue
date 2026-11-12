@@ -1,14 +1,27 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
-import { Lock, Store, Truck } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import { Lock, Store, Truck, Wallet } from 'lucide-vue-next';
 import AppShell from '@/Layouts/AppShell.vue';
 import SeoHead from '@/Components/SeoHead.vue';
 
-const props = defineProps({ cart: Object, defaults: Object, states: Array, provider: String, seo: Object });
-const form = useForm({ delivery_method: 'delivery', contact_name: props.defaults.contact_name || '', contact_phone: props.defaults.contact_phone || '', address: '', city: props.defaults.city || '', state: props.defaults.state || '', note: '' });
+const props = defineProps({ cart: Object, defaults: Object, states: Array, provider: String, wallet: Object, seo: Object });
+const form = useForm({ delivery_method: 'delivery', contact_name: props.defaults.contact_name || '', contact_phone: props.defaults.contact_phone || '', address: '', city: props.defaults.city || '', state: props.defaults.state || '', note: '', use_wallet: (props.wallet?.available_minor || 0) > 0 });
 const total = computed(() => (form.delivery_method === 'pickup' ? props.cart.total_pickup : props.cart.total_delivery));
-const submit = () => form.post(route('checkout.place'));
+const totalMinor = computed(() => (form.delivery_method === 'pickup' ? props.cart.total_pickup_minor : props.cart.total_delivery_minor));
+
+// Pay with wallet (full), on the go (Monnify), or split: wallet first, the rest on the go.
+const money = (minor) => '₦' + (minor / 100).toLocaleString('en-NG', { maximumFractionDigits: minor % 100 ? 2 : 0 });
+const walletPart = computed(() => (form.use_wallet ? Math.min(props.wallet?.available_minor || 0, totalMinor.value) : 0));
+const remainder = computed(() => totalMinor.value - walletPart.value);
+const gateway = computed(() => (props.provider === 'fake' ? 'test checkout' : 'Monnify'));
+const payLabel = computed(() => {
+    if (walletPart.value > 0 && remainder.value === 0) return `Pay ${money(walletPart.value)} from wallet`;
+    if (walletPart.value > 0) return `Pay ${money(remainder.value)} + ${money(walletPart.value)} wallet`;
+    return `Pay ${total.value}`;
+});
+const submit = () => form.transform((d) => ({ ...d, use_wallet: d.use_wallet ? 1 : 0 })).post(route('checkout.place'));
 </script>
 
 <template>
@@ -48,9 +61,29 @@ const submit = () => form.post(route('checkout.place'));
                 <div class="flex justify-between border-t border-ink-100 pt-3 text-sm"><span>Subtotal</span><span>{{ cart.subtotal }}</span></div>
                 <div class="flex justify-between text-sm text-ink-500"><span>Delivery</span><span>{{ form.delivery_method === 'pickup' ? '₦0' : cart.delivery }}</span></div>
                 <div class="mt-3 flex justify-between border-t border-ink-100 pt-3 font-display text-lg font-extrabold"><span>Total</span><span>{{ total }}</span></div>
+
+                <!-- Wallet -->
+                <div v-if="wallet" class="mt-4 rounded-2xl border p-3" :class="form.use_wallet && walletPart ? 'border-brand-300 bg-brand-50/60' : 'border-ink-200'">
+                    <label class="flex items-center gap-3" :class="wallet.available_minor > 0 ? 'cursor-pointer' : 'opacity-60'">
+                        <input v-model="form.use_wallet" type="checkbox" class="rounded border-ink-300 text-brand-600 focus:ring-brand-200" :disabled="wallet.available_minor <= 0" />
+                        <Wallet :size="18" class="text-brand-700" />
+                        <span class="flex-1 text-sm font-semibold">Use wallet</span>
+                        <span class="text-sm font-bold tabular-nums">{{ wallet.available }}</span>
+                    </label>
+                    <div v-if="walletPart > 0" class="mt-2 space-y-0.5 border-t border-brand-100 pt-2 text-sm">
+                        <div class="flex justify-between text-ink-600"><span>From wallet</span><span>−{{ money(walletPart) }}</span></div>
+                        <div class="flex justify-between font-semibold"><span>{{ remainder ? 'Pay on the go' : 'Left to pay' }}</span><span>{{ money(remainder) }}</span></div>
+                    </div>
+                    <Link v-else-if="wallet.available_minor <= 0" :href="route('wallet.index')" class="mt-1 block text-xs font-semibold text-brand-700 hover:underline">Fund wallet</Link>
+                </div>
+
                 <p v-for="(e, k) in form.errors" v-show="!['contact_name','contact_phone','address','city','state'].includes(k)" :key="k" class="mt-2 text-xs text-red-600">{{ e }}</p>
-                <button class="btn-primary btn-lg mt-4 w-full" :disabled="form.processing"><Lock :size="16" /> Pay {{ total }}</button>
-                <p class="hint mt-2">{{ provider === 'fake' ? 'Test mode — no real money moves.' : 'You will be redirected to Monnify to pay securely.' }}</p>
+                <button class="btn-primary btn-lg mt-4 w-full" :disabled="form.processing"><Lock :size="16" /> {{ payLabel }}</button>
+                <p class="hint mt-2">
+                    <template v-if="remainder === 0 && walletPart > 0">Paid instantly from your neaby wallet.</template>
+                    <template v-else-if="provider === 'fake'">Test mode — no real money moves.</template>
+                    <template v-else>You’ll pay {{ walletPart ? 'the rest ' : '' }}securely via {{ gateway }} — card, bank transfer or USSD.<template v-if="walletPart"> Your wallet is only charged once that payment goes through.</template></template>
+                </p>
             </aside>
         </form>
     </AppShell>

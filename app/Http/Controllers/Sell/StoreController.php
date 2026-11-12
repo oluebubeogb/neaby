@@ -6,6 +6,7 @@ use App\Contracts\ObjectStore;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Store;
+use App\Models\StorePhoto;
 use App\Support\NigeriaStates;
 use App\Support\Present;
 use App\Support\Seo;
@@ -42,7 +43,9 @@ class StoreController extends Controller
         $store->user_id = $request->user()->id;
         $store->slug = Str::lower($data['slug']);
         $this->handleImages($request, $store);
+        $this->handleLocation($request, $store);
         $store->save();
+        $this->handlePhotos($request, $store);
 
         AuditLog::record('store.created', $store);
 
@@ -74,7 +77,9 @@ class StoreController extends Controller
         $store->fill($data);
         $store->slug = Str::lower($data['slug']);
         $this->handleImages($request, $store);
+        $this->handleLocation($request, $store);
         $store->save();
+        $this->handlePhotos($request, $store);
 
         return redirect()->route('sell.dashboard')->with('success', 'Store updated.');
     }
@@ -101,6 +106,17 @@ class StoreController extends Controller
             'cover' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', "max:{$maxKb}"],
             'remove_logo' => ['nullable', 'boolean'],
             'remove_cover' => ['nullable', 'boolean'],
+            // Optional GPS pin — only saved once the owner confirmed it on the map.
+            'lat' => ['nullable', 'numeric', 'between:-90,90', 'required_with:lng'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180', 'required_with:lat'],
+            'location_accuracy_m' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'location_confirmed' => ['nullable', 'boolean'],
+            'clear_location' => ['nullable', 'boolean'],
+            // Live-camera shop photos (max StorePhoto::MAX in total).
+            'photos' => ['nullable', 'array', 'max:'.StorePhoto::MAX],
+            'photos.*' => ['image', 'mimes:jpg,jpeg,png,webp', "max:{$maxKb}"],
+            'remove_photos' => ['nullable', 'array', 'max:'.StorePhoto::MAX],
+            'remove_photos.*' => ['integer'],
         ], [
             'slug.regex' => 'Use letters, numbers and dashes only.',
             'slug.not_in' => 'That handle is reserved — try another.',
@@ -121,6 +137,47 @@ class StoreController extends Controller
                 }
                 $store->{$column} = $this->objects->putFile($request->file($field), "stores/{$field}s");
             }
+        }
+    }
+
+    private function handleLocation(Request $request, Store $store): void
+    {
+        if ($request->boolean('clear_location')) {
+            $store->forceFill(['lat' => null, 'lng' => null, 'location_accuracy_m' => null, 'location_confirmed_at' => null]);
+
+            return;
+        }
+        if (! $request->boolean('location_confirmed') || ! $request->filled(['lat', 'lng'])) {
+            return;
+        }
+        $lat = round((float) $request->input('lat'), 6);
+        $lng = round((float) $request->input('lng'), 6);
+        if ($store->lat !== $lat || $store->lng !== $lng || ! $store->location_confirmed_at) {
+            $store->forceFill([
+                'lat' => $lat,
+                'lng' => $lng,
+                'location_accuracy_m' => $request->filled('location_accuracy_m') ? (int) $request->input('location_accuracy_m') : null,
+                'location_confirmed_at' => now(),
+            ]);
+        }
+    }
+
+    private function handlePhotos(Request $request, Store $store): void
+    {
+        $remove = array_map('intval', (array) $request->input('remove_photos', []));
+        if ($remove) {
+            $store->photos()->whereIn('id', $remove)->get()->each(function (StorePhoto $ph) {
+                $this->objects->delete($ph->path);
+                $ph->delete();
+            });
+        }
+        $room = StorePhoto::MAX - $store->photos()->count();
+        $sort = (int) $store->photos()->max('sort');
+        foreach (array_slice((array) $request->file('photos', []), 0, max(0, $room)) as $file) {
+            $store->photos()->create([
+                'path' => $this->objects->putFile($file, 'stores/photos'),
+                'sort' => ++$sort,
+            ]);
         }
     }
 

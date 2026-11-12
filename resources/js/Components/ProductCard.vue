@@ -42,9 +42,9 @@ defineProps({
             <div v-if="showStore && product.store" class="flex items-center gap-1.5 text-xs text-ink-500">
                 <span class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ background: product.store.accent || '#16b26a' }" />
                 <span class="truncate">{{ product.store.name }}</span>
-                <template v-if="product.city">
+                <template v-if="product.travel || product.city">
                     <span class="text-ink-300">·</span>
-                    <MapPin :size="11" class="shrink-0" /><span class="truncate">{{ product.city }}</span>
+                    <MapPin :size="11" class="shrink-0" :class="product.travel ? 'text-brand-600' : ''" /><span class="truncate" :class="product.travel ? 'font-medium text-brand-700' : ''">{{ product.travel || product.city }}</span>
                 </template>
             </div>
         </div>

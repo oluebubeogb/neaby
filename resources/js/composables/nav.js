@@ -1,10 +1,10 @@
-import { Home, Search, PlusCircle, Bell, UserRound, LayoutGrid, ShieldCheck, Heart, Package, Repeat2, Crown, MessageCircle } from 'lucide-vue-next';
+import { Home, Search, PlusCircle, Bell, UserRound, LayoutGrid, ShieldCheck, Heart, Package, Repeat2, Crown, MessageCircle, Wallet } from 'lucide-vue-next';
 import CartIcon from '@/Components/icons/CartIcon.vue';
 
 /** Primary destinations — the same five everywhere, presented per breakpoint. */
 export function primaryNav(user, counts = {}) {
     return [
-        { key: 'home', label: 'Home', icon: Home, href: route('home'), match: ['home'] },
+        { key: 'home', label: 'Home', icon: Home, href: route('landing'), match: ['landing', 'home'] },
         { key: 'search', label: 'Search', icon: Search, href: route('search'), match: ['search', 'categories.*'] },
         { key: 'sell', label: 'Sell', icon: PlusCircle, href: route('sell.dashboard'), match: ['sell.*'], primary: true },
         { key: 'inbox', label: 'Inbox', icon: Bell, href: route('inbox'), match: ['inbox'], badge: counts?.unread || 0 },
@@ -23,6 +23,7 @@ export function secondaryNav(user, counts = {}, features = {}, entitlements = []
     if (user) {
         items.push({ key: 'messages', label: 'Messages', icon: MessageCircle, href: route('messages.index'), match: ['messages.*'], badge: counts?.messages || 0 });
         if (features?.checkout !== false) items.push({ key: 'cart', label: 'Cart', icon: CartIcon, href: route('cart.index'), match: ['cart.*', 'checkout.*'], badge: counts?.cart || 0 });
+        if (features?.wallet !== false) items.push({ key: 'wallet', label: 'Wallet', icon: Wallet, href: route('wallet.index'), match: ['wallet.*'] });
         items.push({ key: 'orders', label: 'Orders', icon: Package, href: route('orders.index'), match: ['orders.*'] });
         items.push({ key: 'saved', label: 'Saved', icon: Heart, href: route('saved.index'), match: ['saved.*'] });
         items.push({ key: 'resell', label: 'Resell', icon: Repeat2, href: route('resell.index'), match: ['resell.*', 'requests.*'] });

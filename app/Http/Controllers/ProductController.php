@@ -48,22 +48,24 @@ class ProductController extends Controller
 
         $moreFromStore = Product::query()->published()
             ->where('store_id', $product->store_id)->whereKeyNot($product->id)
-            ->with(['cover', 'store:id,name,slug,logo_path,accent,status'])
+            ->with(['cover', 'store:'.Present::STORE_CARD_COLUMNS])
             ->latest('published_at')->limit(8)->get();
 
         $similar = $product->category_id ? Product::query()->published()
             ->where('category_id', $product->category_id)
             ->where('store_id', '!=', $product->store_id)
-            ->with(['cover', 'store:id,name,slug,logo_path,accent,status'])
+            ->with(['cover', 'store:'.Present::STORE_CARD_COLUMNS])
             ->latest('published_at')->limit(8)->get() : collect();
 
         $detail = Present::productDetail($product);
         $cover = $detail['images'][0]['url'] ?? null;
+        // Link previews use the designed share card (same PNG the share sheet shows/attaches).
+        [$cardImage, $cardSize] = Seo::card('share.product', $product, $request->query('card'));
 
         $seo = Seo::make(
             $product->title,
             Present::excerpt($product->description),
-            $product->isPublic() ? route('share.product', $product) : $cover,
+            $product->isPublic() ? $cardImage : $cover,
             route('products.show', $product),
             'product',
             [
@@ -88,6 +90,7 @@ class ProductController extends Controller
                 ],
             ],
             index: $product->isPublic(),
+            imageSize: $product->isPublic() ? $cardSize : null,
         );
 
         return Inertia::render('Products/Show', [

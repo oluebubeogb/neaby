@@ -43,8 +43,8 @@ class Inventory
             return false;
         }
         DB::table('products')->where('id', $r->product_id)->update([
-            'quantity' => DB::raw('GREATEST(quantity - '.(int) $r->quantity.', 0)'),
-            'reserved_quantity' => DB::raw('GREATEST(reserved_quantity - '.(int) $r->quantity.', 0)'),
+            'quantity' => DB::raw(self::floorZero('quantity', (int) $r->quantity)),
+            'reserved_quantity' => DB::raw(self::floorZero('reserved_quantity', (int) $r->quantity)),
             'stock_updated_at' => now(),
         ]);
         $r->forceFill(['status' => 'consumed'])->save();
@@ -59,7 +59,7 @@ class Inventory
             return;
         }
         DB::table('products')->where('id', $r->product_id)->update([
-            'reserved_quantity' => DB::raw('GREATEST(reserved_quantity - '.(int) $r->quantity.', 0)'),
+            'reserved_quantity' => DB::raw(self::floorZero('reserved_quantity', (int) $r->quantity)),
             'stock_updated_at' => now(),
         ]);
         $r->forceFill(['status' => $status])->save();
@@ -93,5 +93,11 @@ class Inventory
             });
 
         return $n;
+    }
+
+    /** max(column - n, 0) — portable (GREATEST isn't available on SQLite, used by the test suite). */
+    private static function floorZero(string $column, int $n): string
+    {
+        return "CASE WHEN {$column} > {$n} THEN {$column} - {$n} ELSE 0 END";
     }
 }

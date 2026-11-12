@@ -17,7 +17,7 @@ class SavedController extends Controller
     {
         $saved = SavedProduct::query()->where('user_id', $request->user()->id)
             ->whereHas('product')
-            ->with(['product' => fn ($q) => $q->with(['cover', 'store:id,name,slug,logo_path,accent,status', 'category:id,name,slug'])])
+            ->with(['product' => fn ($q) => $q->with(['cover', 'store:'.Present::STORE_CARD_COLUMNS, 'category:id,name,slug'])])
             ->latest()->paginate(36);
         $seo = Seo::make('Saved', index: false);
 

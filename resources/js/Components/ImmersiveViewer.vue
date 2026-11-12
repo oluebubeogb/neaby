@@ -5,10 +5,13 @@
  *  - metadata bottom-left, a rail of round actions on the right
  *  - data-light: each slide's details (/p/{slug}/peek) and extra photos load only
  *    when the slide is within one of the visible one; images are lazy + async.
+ *  - in-place search: the glass search bar swaps the reel for results from
+ *    /search/json (same ranking as /search) without leaving immersive; clearing
+ *    it brings the previous reel back where you left it.
  */
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { Check, ChevronDown, ChevronUp, ExternalLink, Heart, Share2, X } from 'lucide-vue-next';
+import { ArrowLeft, Check, ChevronDown, ChevronUp, ExternalLink, Heart, Loader2, MapPin, Search, SearchX, Share2, X } from 'lucide-vue-next';
 import CartPill from '@/Components/CartPill.vue';
 import { cartAdded, flyToCart } from '@/composables/cartFx';
 import Avatar from '@/Components/Avatar.vue';
@@ -36,8 +39,102 @@ const saved = reactive({}); // slug → bool
 const sharing = ref(null);
 let io = null;
 
-const list = computed(() => props.items.filter((p) => p && p.slug));
+// ---- in-place search -------------------------------------------------------
+const search = reactive({
+    q: '',           // input text
+    open: false,     // mobile: bar expanded
+    results: null,   // null = showing the feed; [] / [...] = showing results
+    term: '',        // query the results are for
+    page: 1,
+    hasMore: false,
+    loading: false,
+    error: false,
+});
+const searchInput = ref(null);
+let feedIndex = 0;   // where we were in the feed before searching
+let seq = 0;         // drops stale responses
+let typing = null;
+
+const list = computed(() => (search.results ?? props.items).filter((p) => p && p.slug));
 const cur = computed(() => list.value[active.value]);
+const heading = computed(() => (search.results ? `“${search.term}”` : props.title));
+
+async function runSearch(more = false) {
+    if (more && (search.loading || !search.hasMore || !search.results)) return;
+    const q = more ? search.term : search.q.trim();
+    if (!q) return clearSearch();
+    const mine = ++seq;
+    search.loading = true;
+    search.error = false;
+    try {
+        const nextPage = more ? search.page + 1 : 1;
+        const res = await getJson(route('search.json', { q, page: nextPage }));
+        if (mine !== seq) return;
+        if (!more) {
+            if (search.results === null) feedIndex = active.value;
+            search.results = res.items;
+            search.term = res.q || q;
+            await resetReel(0);
+        } else {
+            search.results = search.results.concat(res.items.filter((p) => !search.results.some((r) => r.id === p.id)));
+        }
+        search.page = res.page;
+        search.hasMore = res.hasMore;
+    } catch (_) {
+        if (mine === seq) search.error = true;
+    } finally {
+        if (mine === seq) search.loading = false;
+    }
+}
+function onType() {
+    clearTimeout(typing);
+    if (!search.q.trim()) return;
+    typing = setTimeout(() => runSearch(), 450);
+}
+function submitSearch() {
+    clearTimeout(typing);
+    runSearch();
+    searchInput.value?.blur();      // hand the keyboard back to the reel (arrows, j/k)
+    scroller.value?.focus({ preventScroll: true });
+}
+async function clearSearch() {
+    clearTimeout(typing);
+    seq++;
+    search.q = '';
+    search.loading = false;
+    search.error = false;
+    if (search.results !== null) {
+        search.results = null;
+        search.term = '';
+        search.hasMore = false;
+        await resetReel(feedIndex);
+    }
+    search.open = false;
+}
+function onSearchKey(e) {
+    // Typing in the box must never drive the reel.
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        if (search.q) { search.q = ''; if (search.results) clearSearch(); } else { searchInput.value?.blur(); search.open = false; scroller.value?.focus({ preventScroll: true }); }
+    }
+}
+async function openSearch() {
+    search.open = true;
+    await nextTick();
+    searchInput.value?.focus();
+}
+async function resetReel(i) {
+    active.value = Math.max(0, Math.min(i, list.value.length - 1));
+    await nextTick();
+    scroller.value?.children[active.value]?.scrollIntoView({ block: 'start' });
+    observe();
+    peek(active.value); peek(active.value + 1);
+}
+function reachedEnd() {
+    if (search.results) runSearch(true);
+    else emit('end');
+}
 
 async function peek(i) {
     const p = list.value[i];
@@ -51,7 +148,7 @@ async function peek(i) {
         details[p.slug] = { failed: true };
     }
 }
-watch(active, (i) => { peek(i); peek(i + 1); peek(i - 1); if (i >= list.value.length - 3) emit('end'); });
+watch(active, (i) => { peek(i); peek(i + 1); peek(i - 1); if (i >= list.value.length - 3) reachedEnd(); });
 // Feed grew while open (infinite scroll) — observe the new slides too.
 watch(() => list.value.length, async () => { if (!props.show) return; await nextTick(); observe(); });
 
@@ -65,7 +162,7 @@ function observe() {
 
 watch(() => props.show, async (v) => {
     document.documentElement.classList.toggle('overflow-hidden', v);
-    if (!v) { io?.disconnect(); return; }
+    if (!v) { io?.disconnect(); clearTimeout(typing); seq++; Object.assign(search, { q: '', open: false, results: null, term: '', hasMore: false, loading: false, error: false }); return; }
     active.value = Math.max(0, Math.min(props.start, list.value.length - 1));
     peek(active.value); peek(active.value + 1);
     await nextTick();
@@ -80,7 +177,9 @@ function go(d) {
     scroller.value?.children[i]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function onKey(e) {
-    if (e.key === 'Escape') { if (!sharing.value) emit('close'); }
+    if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA') return;
+    if (e.key === 'Escape') { if (sharing.value) return; if (search.results) clearSearch(); else emit('close'); }
+    else if (e.key === '/') { e.preventDefault(); openSearch(); }
     else if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); go(1); }
     else if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); go(-1); }
     else if (e.key === 'ArrowRight') swipe(cur.value, 1);
@@ -148,10 +247,39 @@ function open(p) { emit('close'); router.visit(details[p.slug]?.url || route('pr
         <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0" leave-active-class="transition duration-150" leave-to-class="opacity-0">
             <div v-if="show" ref="layer" class="fixed inset-0 z-[60] bg-ink-950/80 text-white backdrop-blur-2xl" role="dialog" aria-modal="true" :aria-label="title">
                 <!-- top bar -->
-                <div class="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-3 bg-gradient-to-b from-black/60 to-transparent px-4 pb-10 pt-[calc(env(safe-area-inset-top)+12px)]">
-                    <span class="font-brand text-lg font-bold tracking-tight">neaby<span class="text-brand-400">.</span></span>
-                    <span class="text-[11px] font-bold uppercase tracking-[.16em] text-white/70">{{ title }}</span>
-                    <span class="ml-auto text-xs tabular-nums text-white/60">{{ active + 1 }} / {{ list.length }}</span>
+                <div class="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-2 bg-gradient-to-b from-black/60 to-transparent px-4 pb-10 pt-[calc(env(safe-area-inset-top)+12px)] sm:gap-3">
+                    <Tip v-if="search.results" label="Back to the reel (Esc)" side="bottom" dark>
+                        <button class="immersive-btn pointer-events-auto h-10 w-10" aria-label="Back to the reel" @click="clearSearch"><ArrowLeft :size="19" /></button>
+                    </Tip>
+                    <span class="font-brand text-lg font-bold tracking-tight" :class="search.open ? 'hidden md:inline' : ''">neaby<span class="text-brand-400">.</span></span>
+                    <span class="hidden max-w-[12rem] truncate text-[11px] font-bold uppercase tracking-[.16em] text-white/70 sm:inline" :class="search.open ? 'md:hidden lg:inline' : ''">{{ heading }}</span>
+
+                    <!-- glass search: always visible from md; an icon that expands on phones -->
+                    <form
+                        role="search"
+                        class="pointer-events-auto relative min-w-0 flex-1 md:mx-auto md:max-w-sm md:flex-none md:basis-80"
+                        :class="search.open || search.results ? 'block' : 'hidden md:block'"
+                        @submit.prevent="submitSearch"
+                    >
+                        <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/60" />
+                        <input
+                            ref="searchInput"
+                            v-model="search.q"
+                            type="search"
+                            enterkeyhint="search"
+                            autocomplete="off"
+                            placeholder="Search neaby"
+                            aria-label="Search products without leaving immersive view"
+                            class="h-10 w-full rounded-full border-0 bg-white/10 pl-10 pr-10 text-sm text-white placeholder-white/50 ring-1 ring-white/15 backdrop-blur-xl transition [appearance:textfield] focus:bg-white/15 focus:ring-2 focus:ring-brand-400/70 [&::-webkit-search-cancel-button]:hidden"
+                            @input="onType"
+                            @keydown="onSearchKey"
+                        />
+                        <Loader2 v-if="search.loading" :size="16" class="absolute right-3.5 top-1/2 -translate-y-1/2 animate-spin text-white/70" />
+                        <button v-else-if="search.q || search.results" type="button" class="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-white/70 transition hover:bg-white/15 hover:text-white" aria-label="Clear search" @click="clearSearch"><X :size="15" /></button>
+                    </form>
+                    <button v-if="!search.open && !search.results" class="immersive-btn pointer-events-auto ml-auto h-10 w-10 md:hidden" aria-label="Search" @click="openSearch"><Search :size="18" /></button>
+
+                    <span class="text-xs tabular-nums text-white/60" :class="[search.open || search.results ? 'hidden sm:inline' : '', 'md:ml-auto']">{{ list.length ? active + 1 : 0 }} / {{ list.length }}</span>
                     <Tip v-if="page.props.auth?.user && page.props.features?.checkout !== false" label="Cart" side="bottom" dark>
                         <CartPill dark class="pointer-events-auto" @click="emit('close')" />
                     </Tip>
@@ -194,7 +322,8 @@ function open(p) { emit('close'); router.visit(details[p.slug]?.url || route('pr
                                 <div class="mt-1 flex items-baseline gap-2">
                                     <span class="font-display text-lg font-extrabold text-brand-300">{{ p.price }}</span>
                                     <span v-if="p.compare_at" class="text-sm text-white/50 line-through">{{ p.compare_at }}</span>
-                                    <span v-if="p.city || details[p.slug]?.city" class="text-xs text-white/60">· {{ p.city || details[p.slug]?.city }}</span>
+                                    <span v-if="p.travel" class="inline-flex items-center gap-1 text-xs font-semibold text-brand-200"><MapPin :size="12" />{{ p.travel }}</span>
+                                    <span v-else-if="p.city || details[p.slug]?.city" class="text-xs text-white/60">· {{ p.city || details[p.slug]?.city }}</span>
                                 </div>
                                 <p v-if="details[p.slug]?.excerpt" class="mt-2 line-clamp-2 text-[13px] leading-relaxed text-white/75">{{ details[p.slug].excerpt }}</p>
                             </div>
@@ -224,6 +353,14 @@ function open(p) { emit('close'); router.visit(details[p.slug]?.url || route('pr
                         </div>
                     </section>
                 </div>
+
+                <!-- in-place search: no results / error -->
+                <div v-if="search.results && !list.length && !search.loading" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 px-8 text-center">
+                    <span class="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/15"><SearchX :size="26" class="text-white/80" /></span>
+                    <p class="max-w-xs text-sm text-white/75">Nothing for “{{ search.term }}” yet.</p>
+                    <button class="pointer-events-auto rounded-full bg-white/10 px-4 py-2 text-sm font-semibold ring-1 ring-white/20 transition hover:bg-white/20" @click="clearSearch">Back to {{ title.toLowerCase() }}</button>
+                </div>
+                <div v-if="search.error" class="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+64px)] z-30 mx-auto max-w-sm rounded-2xl bg-white/95 px-4 py-2.5 text-center text-sm font-semibold text-red-600 shadow-2xl" role="alert">Search didn’t go through. Try again.</div>
 
                 <!-- added-to-cart toast (inside the layer so it's never hidden behind it) -->
                 <Transition enter-from-class="opacity-0 -translate-y-3 scale-95" leave-to-class="opacity-0 -translate-y-2" enter-active-class="transition duration-300 ease-out" leave-active-class="transition duration-200">

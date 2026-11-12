@@ -27,8 +27,16 @@ class User extends Authenticatable implements MustVerifyEmail
             'email_verified_at' => 'datetime',
             'suspended_at' => 'datetime',
             'is_admin' => 'boolean',
+            'location_lat' => 'float',
+            'location_lng' => 'float',
+            'location_updated_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function wallet(): HasOne
+    {
+        return $this->hasOne(Wallet::class);
     }
 
     public function store(): HasOne

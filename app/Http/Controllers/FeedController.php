@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\Store;
+use App\Services\Geo\Near;
 use App\Services\Feed\ForYouFeed;
 use App\Support\Present;
 use App\Support\Seo;
@@ -19,17 +20,25 @@ class FeedController extends Controller
             ? Category::query()->where('slug', $request->string('category'))->first()
             : null;
 
-        $result = $feed->page($request->user(), self::sessionHash($request), $page, 24, $category?->id);
+        $result = $feed->page($request->user(), self::sessionHash($request), $page, 24, $category?->id, Near::current());
 
         $this->recordImpressions($request, $result['items']);
 
-        $seo = Seo::make('For You', 'Fresh finds from stores near you on neaby.');
+        // `/` and `/home` render this same feed; `/` is the canonical, indexable entry point.
+        $seo = Seo::make(
+            $category ? $category->name : config('neaby.brand', 'neaby'),
+            $category
+                ? "Shop {$category->name} from stores near you on neaby."
+                : 'Shop fresh finds from stores near you — fashion, phones, beauty, home and more. Pay securely, chat with sellers and get it delivered or pick it up nearby.',
+            canonical: $category ? route('landing', ['category' => $category->slug]) : route('landing'),
+        );
 
         return Inertia::render('Home', [
             'feed' => Inertia::merge(fn () => $result['items']->map(fn ($p) => Present::productCard($p))->values()),
             'page' => $page,
             'hasMore' => $result['has_more'],
             'personalised' => $result['personalised'],
+            'nearby' => $result['nearby'],
             'activeCategory' => $category?->slug,
             'spotlightStores' => fn () => Store::query()->active()
                 ->whereHas('products', fn ($q) => $q->where('status', 'published'))

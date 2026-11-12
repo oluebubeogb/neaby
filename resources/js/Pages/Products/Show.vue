@@ -1,7 +1,7 @@
 <script setup>
 import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, ref } from 'vue';
-import { BadgeCheck, Check, Eye, ImageOff, Info, Maximize2, MapPin, Package, Pencil, Repeat2, Share2, ShieldCheck, Sparkles, Store, Truck, Zap } from 'lucide-vue-next';
+import { BadgeCheck, Check, Eye, ImageOff, Info, Maximize2, MapPin, Navigation, Package, Pencil, Repeat2, Share2, ShieldCheck, Sparkles, Store, Truck, Zap } from 'lucide-vue-next';
 import Tip from '@/Components/Tip.vue';
 import ReachOut from '@/Components/ReachOut.vue';
 import QtyStepper from '@/Components/QtyStepper.vue';
@@ -59,7 +59,7 @@ function addToCart(buyNow = false) {
 }
 const immersive = ref(false);
 const immersiveItems = computed(() => [
-    { id: props.product.id, slug: props.product.slug, title: props.product.title, price: props.product.price, compare_at: props.product.compare_at, image: images.value[0]?.url || null, city: props.product.city, store: store.value },
+    { id: props.product.id, slug: props.product.slug, title: props.product.title, price: props.product.price, compare_at: props.product.compare_at, image: images.value[0]?.url || null, city: props.product.city, travel: props.product.travel, store: store.value },
     ...(props.moreFromStore || []),
     ...(props.similar || []),
 ].filter((p, i, a) => a.findIndex((x) => x.slug === p.slug) === i));
@@ -152,6 +152,7 @@ const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 te
                 </div>
                 <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-500">
                     <span v-if="product.city || product.state" class="inline-flex items-center gap-1"><MapPin :size="14" /> {{ [product.city, product.state].filter(Boolean).join(', ') }}</span>
+                    <span v-if="product.travel" class="inline-flex items-center gap-1 font-semibold text-brand-700"><Navigation :size="13" /> {{ product.travel }}</span>
                     <span class="inline-flex items-center gap-1"><Eye :size="14" /> {{ product.views }} views</span>
                     <span v-if="product.quantity > 0 && product.quantity <= 5" class="font-medium text-amber-700">Only {{ product.quantity }} left</span>
                 </div>

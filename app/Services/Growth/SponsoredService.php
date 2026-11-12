@@ -2,6 +2,7 @@
 
 namespace App\Services\Growth;
 
+use App\Support\Present;
 use App\Models\PaymentTransaction;
 use App\Models\Product;
 use App\Models\SponsoredPlacement;
@@ -63,7 +64,7 @@ class SponsoredService
             ->whereHas('product', fn ($q) => $q->published()->whereRaw('quantity > reserved_quantity')->when($categoryId, fn ($c) => $c->where('category_id', $categoryId)))
             ->whereNotIn('product_id', $excludeIds)
             ->inRandomOrder()->limit($limit * 3)->get()->unique('product_id')->take($limit)
-            ->load(['product' => fn ($q) => $q->with(['cover', 'store:id,name,slug,logo_path,accent,status,created_at,quality_score', 'category:id,name,slug'])]);
+            ->load(['product' => fn ($q) => $q->with(['cover', 'store:'.Present::STORE_CARD_COLUMNS.',created_at,quality_score', 'category:id,name,slug'])]);
     }
 
     public function endExpired(): int

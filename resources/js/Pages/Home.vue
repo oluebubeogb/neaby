@@ -10,12 +10,14 @@ import AppIcon from '@/Components/AppIcon.vue';
 import ProductGrid from '@/Components/ProductGrid.vue';
 import StoreChip from '@/Components/StoreChip.vue';
 import EmptyState from '@/Components/EmptyState.vue';
+import NearMe from '@/Components/NearMe.vue';
 
 const props = defineProps({
     feed: Array,
     page: Number,
     hasMore: Boolean,
     personalised: Boolean,
+    nearby: Boolean,
     activeCategory: String,
     spotlightStores: Array,
     seo: Object,
@@ -37,7 +39,9 @@ function loadMore() {
 }
 
 function pickCategory(slug) {
-    router.get(route('home'), slug ? { category: slug } : {}, { preserveScroll: false, reset: ['feed'] });
+    // Stay on whichever entry point we're on: `/` and `/home` are the same feed.
+    const base = route().current('home') ? route('home') : route('landing');
+    router.get(base, slug ? { category: slug } : {}, { preserveScroll: false, reset: ['feed'] });
 }
 
 onMounted(() => {
@@ -70,7 +74,10 @@ const greeting = (() => {
                         </Tip>
                     </h1>
                 </div>
-                <Link :href="route('sell.products.create')" class="btn-primary hidden md:inline-flex"><PlusCircle :size="18" /> List an item</Link>
+                <div class="flex items-center gap-2">
+                    <NearMe />
+                    <Link :href="route('sell.products.create')" class="btn-primary hidden md:inline-flex"><PlusCircle :size="18" /> List an item</Link>
+                </div>
             </div>
 
             <div class="no-scrollbar -mx-3 mt-4 flex gap-2 overflow-x-auto px-3 pb-1 sm:-mx-4 sm:px-4 md:mx-0 md:px-0">

@@ -43,9 +43,12 @@ class HandleInertiaRequests extends Middleware
             'features' => [
                 'checkout' => (bool) config('neaby.checkout.enabled'),
                 'sponsored' => (bool) config('neaby.sponsored.enabled'),
+                'wallet' => (bool) config('neaby.wallet.enabled', true),
                 'sandbox' => fn () => app(\App\Services\Payments\PaymentManager::class)->provider()->name() === 'fake',
             ],
             'categories' => fn () => Category::menu(),
+            // Shopper location (nearby-first). Only the area name goes to the client.
+            'near' => fn () => ($n = \App\Services\Geo\Near::current()) ? ['city' => $n->city, 'state' => $n->state, 'precise' => $n->hasCoords()] : null,
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

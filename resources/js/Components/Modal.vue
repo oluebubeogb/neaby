@@ -14,6 +14,12 @@ const props = defineProps({
         type: Boolean,
         default: true,
     },
+    // Viewport-fit mode: the panel is centred and never taller than the
+    // visible viewport (safe areas included); its content scrolls as one unit.
+    fit: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const emit = defineEmits(['close']);
@@ -90,7 +96,8 @@ const maxWidthClass = computed(() => {
         ref="dialog"
     >
         <div
-            class="fixed inset-0 z-[80] overflow-y-auto px-4 py-6 sm:px-0"
+            class="fixed inset-0 z-[80]"
+            :class="fit ? 'modal-fit flex items-center justify-center' : 'overflow-y-auto px-4 py-6 sm:px-0'"
             scroll-region
         >
             <Transition
@@ -122,8 +129,8 @@ const maxWidthClass = computed(() => {
             >
                 <div
                     v-show="show"
-                    class="mb-6 transform overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-ink-900/5 transition-all sm:mx-auto sm:w-full"
-                    :class="maxWidthClass"
+                    class="transform rounded-2xl bg-white shadow-2xl ring-1 ring-ink-900/5 transition-all sm:mx-auto sm:w-full"
+                    :class="[maxWidthClass, fit ? 'relative flex max-h-full w-full flex-col overflow-y-auto overscroll-contain' : 'mb-6 overflow-hidden']"
                 >
                     <slot v-if="showSlot" />
                 </div>
@@ -131,3 +138,17 @@ const maxWidthClass = computed(() => {
         </div>
     </dialog>
 </template>
+
+<style scoped>
+/* Fit mode: keep clear of notches / home indicator and use the *visible* height. */
+.modal-fit {
+    padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+    height: 100vh;
+    height: 100dvh;
+}
+@media (min-width: 640px) {
+    .modal-fit {
+        padding: max(1.5rem, env(safe-area-inset-top)) 1.5rem max(1.5rem, env(safe-area-inset-bottom));
+    }
+}
+</style>
