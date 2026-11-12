@@ -7,7 +7,9 @@ use App\Models\ProductView;
 use App\Models\ResellerListing;
 use App\Models\SavedProduct;
 use App\Models\SponsoredPlacement;
+use App\Services\Geo\Near;
 use App\Services\Growth\Engagement;
+use App\Services\Shopping\Complements;
 use App\Services\Membership\Entitlements;
 use App\Services\Resale\ResaleService;
 use App\Support\Present;
@@ -104,6 +106,11 @@ class ProductController extends Controller
             'shareUrl' => route('products.show', $product),
             'moreFromStore' => $moreFromStore->map(fn ($p) => Present::productCard($p)),
             'similar' => $similar->map(fn ($p) => Present::productCard($p)),
+            // Precomputed from stored CLIP vectors (product_complements) — a table read, never a model call.
+            'completeTheLook' => $product->isPublic()
+                ? app(Complements::class)->for($product, Near::current())->map(fn ($p) => Present::productCard($p))->values()
+                : [],
+            'canAsk' => $product->isPublic(),
             'seo' => $seo,
         ])->withViewData(['seo' => $seo]);
     }

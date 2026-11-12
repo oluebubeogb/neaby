@@ -24,6 +24,36 @@ return [
         'api_key' => env('LISTING_AI_API_KEY'),
         'model' => env('LISTING_AI_MODEL', 'gpt-4o-mini'),
         'timeout' => (int) env('LISTING_AI_TIMEOUT', 15),
+        // Send product photos to the model for listing Q&A (only if LISTING_AI_MODEL is a vision model).
+        'vision' => (bool) env('LISTING_AI_VISION', false),
+    ],
+
+    // Shopper AI (plain-language search, listing Q&A, gift plans, "what can I get", voice).
+    // Reuses the LISTING_AI_* OpenAI-compatible endpoint (RunPod in production). Only runs
+    // when the shopper submits / asks — never on the For You feed or on search keystrokes.
+    // Needs LISTING_AI_DRIVER=openai + a key; otherwise every feature falls back to plain rules.
+    'shopper_ai' => [
+        'enabled' => (bool) env('NEABY_SHOPPER_AI', true),
+        'model' => env('NEABY_SHOPPER_AI_MODEL'), // default: LISTING_AI_MODEL
+        'timeout' => (int) env('NEABY_SHOPPER_AI_TIMEOUT', 12),
+        'cache_minutes' => (int) env('NEABY_SHOPPER_AI_CACHE_MINUTES', 1440),
+    ],
+
+    // Image embeddings for photo search, complete-the-look and For You affinity.
+    // Replicate CLIP (clip-vit-large-patch14, 768-d). Same model for vendor photos and shopper snaps.
+    // Without REPLICATE_API_TOKEN photo search is hidden and everything else works as before.
+    'clip' => [
+        'token' => env('REPLICATE_API_TOKEN'),
+        'model' => env('REPLICATE_CLIP_MODEL', 'andreasjansson/clip-features'),
+        // Community models need a version id; blank = resolve the model's latest version (cached).
+        'version' => env('REPLICATE_CLIP_VERSION'),
+        'base_url' => env('REPLICATE_BASE_URL', 'https://api.replicate.com/v1'),
+        'timeout' => (int) env('REPLICATE_TIMEOUT', 60),
+        'dimensions' => 768,
+        'batch' => (int) env('REPLICATE_CLIP_BATCH', 8),
+        // Cosine similarity below this is "not a match" for photo search.
+        'min_similarity' => (float) env('NEABY_PHOTO_MIN_SIMILARITY', 0.6),
+        'max_attempts' => (int) env('NEABY_EMBED_MAX_ATTEMPTS', 5),
     ],
 
     'currency' => 'NGN',

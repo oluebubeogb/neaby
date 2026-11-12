@@ -24,6 +24,7 @@ use App\Http\Controllers\QrController;
 use App\Http\Controllers\PublicProfileController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\Sell;
+use App\Http\Controllers\Shop;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\StorefrontController;
 use App\Http\Controllers\WalletController;
@@ -39,6 +40,16 @@ Route::get('/home', FeedController::class)->name('home');
 Route::get('/search', SearchController::class)->name('search');
 // In-place search (immersive viewer): JSON product cards, same ranking as /search.
 Route::get('/search/json', [SearchController::class, 'json'])->middleware('throttle:60,1')->name('search.json');
+// AI shopping (only when the shopper asks — never on the feed or on keystrokes). Throttled.
+Route::post('/search/photo', Shop\PhotoSearchController::class)->middleware('throttle:photo-search')->name('search.photo');
+Route::post('/p/{product:slug}/ask', Shop\ListingQuestionController::class)->middleware('throttle:shopper-ai')->name('products.ask');
+Route::get('/gift', [Shop\AssistantController::class, 'gift'])->name('gift');
+Route::post('/gift/suggest', [Shop\AssistantController::class, 'giftSuggest'])->middleware('throttle:shopper-ai')->name('gift.suggest');
+Route::post('/assistant/voice', [Shop\AssistantController::class, 'voice'])->middleware('throttle:shopper-ai')->name('assistant.voice');
+// Trip-aware shopping: rank around a destination city (session; saved on the account when signed in).
+Route::get('/trip/cities', [Shop\TripController::class, 'cities'])->name('trip.cities');
+Route::post('/trip', [Shop\TripController::class, 'store'])->middleware('throttle:20,1')->name('trip.store');
+Route::delete('/trip', [Shop\TripController::class, 'destroy'])->middleware('throttle:20,1')->name('trip.destroy');
 // Shopper location for nearby-first ranking (session; saved on the account when signed in).
 Route::post('/location', [LocationController::class, 'store'])->middleware('throttle:20,1')->name('location.store');
 Route::get('/location/area', [LocationController::class, 'area'])->middleware('throttle:30,1')->name('location.area');
@@ -107,6 +118,7 @@ Route::middleware('auth')->group(function () {
 
     // Wallet: fund from neaby (gateway hosted checkout), balance + history.
     Route::get('/wallet', [WalletController::class, 'index'])->name('wallet.index');
+    Route::post('/assistant/budget', [Shop\AssistantController::class, 'budget'])->middleware('throttle:shopper-ai')->name('assistant.budget');
     Route::post('/wallet/fund', [WalletController::class, 'fund'])->middleware('throttle:checkout')->name('wallet.fund');
 
     // Payments (return URL + local fake sandbox)

@@ -69,6 +69,15 @@ class Engagement
 
         $this->bumpCounters($type, $product, $store, $listing);
 
+        // Strong intent → refresh this shopper's precomputed For You rows in the background (SQL only).
+        if ($user && in_array($type, ['save', 'cart_add'], true)) {
+            try {
+                \App\Services\Feed\FeedScores::queueUser($user->id);
+            } catch (\Throwable) {
+                // never let feed bookkeeping break the action
+            }
+        }
+
         return true;
     }
 

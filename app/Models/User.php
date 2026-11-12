@@ -19,7 +19,7 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $fillable = ['name', 'username', 'email', 'password', 'bio', 'city', 'state', 'avatar_path'];
 
     // is_admin and suspended_at are deliberately NOT mass assignable.
-    protected $hidden = ['password', 'remember_token'];
+    protected $hidden = ['password', 'remember_token', 'trip_lat', 'trip_lng'];
 
     protected function casts(): array
     {
@@ -30,6 +30,9 @@ class User extends Authenticatable implements MustVerifyEmail
             'location_lat' => 'float',
             'location_lng' => 'float',
             'location_updated_at' => 'datetime',
+            'trip_lat' => 'float',
+            'trip_lng' => 'float',
+            'trip_set_at' => 'datetime',
             'password' => 'hashed',
         ];
     }

@@ -51,6 +51,10 @@ class Present
             'compare_at' => $p->compare_at_minor && $p->compare_at_minor > $p->price_minor ? self::money($p->compare_at_minor, $p->currency) : null,
             'condition' => $p->condition,
             'in_stock' => $p->available() > 0,
+            // One-tap add to cart on cards: buyable here, and whether a size/colour must be picked first.
+            'can_buy' => (bool) $p->checkout_enabled && (bool) config('neaby.checkout.enabled') && $p->available() > 0 && $p->status === 'published',
+            'has_options' => ! empty($p->options),
+            'mine' => auth()->id() !== null && (int) auth()->id() === (int) $p->user_id,
             'sponsored' => (bool) $p->getAttribute('sponsored_placement_id'),
             'sp' => $p->getAttribute('sponsored_placement_id'),
             'city' => $p->city,
@@ -181,7 +185,12 @@ class Present
 
     public static function travel(?Store $s): ?string
     {
-        return $s && $s->hasGps() ? Proximity::label(Near::current(), $s) : null;
+        $near = Near::current();
+        if ($near?->trip) {
+            return null; // trip destination is a city centre, not where the shopper stands — no walk/drive times
+        }
+
+        return $s && $s->hasGps() ? Proximity::label($near, $s) : null;
     }
 
     public static function storeDetail(Store $s): array

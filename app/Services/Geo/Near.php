@@ -13,11 +13,18 @@ final class Near
 {
     public const SESSION_KEY = 'neaby.near';
 
+    /** Trip destination (trip-aware shopping): ranks around the destination instead of where the shopper is now. */
+    public const TRIP_KEY = 'neaby.trip';
+
+    /** A saved trip on the account expires after this many days. */
+    public const TRIP_DAYS = 30;
+
     public function __construct(
         public readonly ?float $lat = null,
         public readonly ?float $lng = null,
         public readonly ?string $city = null,
         public readonly ?string $state = null,
+        public readonly bool $trip = false,
     ) {}
 
     /** The current request's shopper location (memoised on the request). */
@@ -41,6 +48,9 @@ final class Near
 
     public static function fromRequest(Request $request): ?self
     {
+        if ($trip = self::tripFromRequest($request)) {
+            return $trip;
+        }
         $s = $request->hasSession() ? $request->session()->get(self::SESSION_KEY) : null;
         if (is_array($s) && isset($s['lat'], $s['lng'])) {
             return new self((float) $s['lat'], (float) $s['lng'], $s['city'] ?? null, $s['state'] ?? null);
@@ -53,6 +63,24 @@ final class Near
             $c = NigeriaCities::find($u->city);
 
             return new self($c[0] ?? null, $c[1] ?? null, $u->city, $u->state ?: ($c[2] ?? null));
+        }
+
+        return null;
+    }
+
+    /** Active trip destination: session first (guests), then the account (signed in, not expired). */
+    public static function tripFromRequest(Request $request): ?self
+    {
+        $t = $request->hasSession() ? $request->session()->get(self::TRIP_KEY) : null;
+        if (is_array($t) && isset($t['lat'], $t['lng'])) {
+            return new self((float) $t['lat'], (float) $t['lng'], $t['city'] ?? null, $t['state'] ?? null, true);
+        }
+        if (is_array($t) && ! empty($t['off'])) {
+            return null; // cleared this session
+        }
+        $u = $request->user();
+        if ($u && $u->trip_lat !== null && $u->trip_lng !== null && $u->trip_set_at && $u->trip_set_at->gt(now()->subDays(self::TRIP_DAYS))) {
+            return new self((float) $u->trip_lat, (float) $u->trip_lng, $u->trip_city, $u->trip_state, true);
         }
 
         return null;
@@ -72,6 +100,6 @@ final class Near
 
     public function toArray(): array
     {
-        return ['lat' => $this->lat, 'lng' => $this->lng, 'city' => $this->city, 'state' => $this->state];
+        return ['lat' => $this->lat, 'lng' => $this->lng, 'city' => $this->city, 'state' => $this->state] + ($this->trip ? ['trip' => true] : []);
     }
 }

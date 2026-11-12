@@ -1,11 +1,14 @@
 <script setup>
 import { Link } from '@inertiajs/vue3';
-import { ImageOff, MapPin } from 'lucide-vue-next';
+import { Check, ImageOff, MapPin, SlidersHorizontal } from 'lucide-vue-next';
+import CartIcon from '@/Components/icons/CartIcon.vue';
+import { useQuickAdd } from '@/composables/quickAdd';
 
 defineProps({
     product: { type: Object, required: true },
     showStore: { type: Boolean, default: true },
 });
+const { add, inCart, canQuickAdd, quick } = useQuickAdd();
 </script>
 
 <template>
@@ -31,6 +34,26 @@ defineProps({
             </div>
             <span v-if="!product.in_stock" class="badge absolute bottom-2 left-2 bg-red-600 text-white">Sold out</span>
             <span v-if="product.sponsored" class="badge absolute right-2 top-2 bg-amber-100/95 text-amber-900 backdrop-blur" title="Paid placement">Sponsored</span>
+
+            <!-- One tap to cart (sizes/colours → opens the listing to choose). -->
+            <button
+                v-if="canQuickAdd(product)"
+                type="button"
+                class="absolute bottom-2 right-2 flex h-11 w-11 items-center justify-center rounded-full bg-brand-500 text-white shadow-glow ring-2 ring-white/80 transition hover:bg-brand-600 active:scale-95 disabled:opacity-60"
+                :class="quick.added[product.id] ? 'scale-110 bg-brand-400 ring-4 ring-brand-200' : ''"
+                :disabled="quick.adding[product.id]"
+                :aria-label="product.has_options ? `Choose options for ${product.title}` : `Add ${product.title} to cart`"
+                :title="product.has_options ? 'Choose size / colour' : 'Add to cart'"
+                @click.stop.prevent="add(product, $event)"
+            >
+                <Transition mode="out-in" enter-from-class="scale-50 opacity-0" leave-to-class="scale-50 opacity-0" enter-active-class="transition duration-200" leave-active-class="transition duration-150">
+                    <Check v-if="quick.added[product.id]" key="ok" :size="20" :stroke-width="3" />
+                    <SlidersHorizontal v-else-if="product.has_options" key="opt" :size="18" />
+                    <CartIcon v-else key="cart" :size="20" :class="quick.adding[product.id] ? 'animate-pulse' : ''" />
+                </Transition>
+                <span v-if="inCart(product)" class="absolute -right-1 -top-1 min-w-[20px] rounded-full bg-white px-1 text-center text-[11px] font-extrabold leading-5 text-brand-700 shadow ring-2 ring-brand-500" :aria-label="`${inCart(product)} in cart`">×{{ inCart(product) }}</span>
+            </button>
+            <span v-if="quick.error[product.id]" class="absolute inset-x-2 bottom-14 rounded-xl bg-white/95 px-2 py-1 text-center text-[11px] font-semibold text-red-600 shadow" role="alert">{{ quick.error[product.id] }}</span>
         </div>
 
         <div class="flex flex-1 flex-col gap-1 p-3 sm:p-3.5">

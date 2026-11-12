@@ -21,6 +21,8 @@ use Illuminate\Support\Collection;
  * When the shopper shared a location, nearby stores get a strong boost (same
  * area → nearby towns → region) and nearby stock is always in the candidate pool;
  * everything else still shows, just later.
+ * Precomputed feed_scores (embedding look-alikes of what you engaged with, nearby,
+ * trending) are read from Postgres and added on top; empty table → same feed as before.
  * Explainable, no model call. Never ranks by raw time-on-page.
  */
 class ForYouFeed
@@ -30,6 +32,13 @@ class ForYouFeed
     private const MAX_PER_STORE_IN_WINDOW = 2; // per 12 consecutive items
 
     private const NEARBY_CANDIDATES = 200;
+
+    private const PRECOMPUTED_CANDIDATES = 120;
+
+    /** Weight of feed_scores (0..1) in the final score: personal look-alikes vs. global trending. */
+    private const PERSONAL_WEIGHT = 0.7;
+
+    private const TRENDING_WEIGHT = 0.25;
 
     /** Score boost per proximity tier (Proximity::TIERS): same area, nearby towns, region, far. */
     private const PROXIMITY_BOOST = [0 => 1.0, 1 => 0.65, 2 => 0.4, 3 => 0.15, 4 => 0.0, 5 => 0.0];
@@ -54,11 +63,23 @@ class ForYouFeed
             $candidates = $candidates->concat($nearby)->unique('id')->values();
         }
 
+        // Precomputed boosts (neaby:feed:recompute — embedding look-alikes, nearby, trending).
+        // A plain indexed read: the feed never calls Replicate, RunPod or any model.
+        $pre = app(FeedScores::class)->for($user);
+        if ($pre['scores']) {
+            $missing = array_diff(array_keys(array_slice($pre['scores'], 0, self::PRECOMPUTED_CANDIDATES, true)), $candidates->pluck('id')->all());
+            if ($missing) {
+                $candidates = $candidates->concat($base()->whereIn('products.id', $missing)->get())->unique('id')->values();
+            }
+        }
+        $boostWeight = $pre['personal'] ? self::PERSONAL_WEIGHT : self::TRENDING_WEIGHT;
+
         $signals = $this->signals($candidates->pluck('id')->all());
 
         $ranked = $this->diversify(
             $candidates->sortByDesc(fn (Product $p) => $this->score($p, $affinity, $signals[$p->id] ?? [])
-                + $this->proximityBoost($near, $p))->values()
+                + $this->proximityBoost($near, $p)
+                + $boostWeight * ($pre['scores'][$p->id] ?? 0.0))->values()
         );
 
         $slice = $ranked->slice(($page - 1) * $perPage, $perPage)->values();
@@ -67,7 +88,7 @@ class ForYouFeed
         return [
             'items' => $slice,
             'has_more' => $ranked->count() > $page * $perPage,
-            'personalised' => ! empty($affinity),
+            'personalised' => ! empty($affinity) || $pre['personal'],
             'nearby' => (bool) $near,
         ];
     }

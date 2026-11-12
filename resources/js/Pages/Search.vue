@@ -1,7 +1,11 @@
 <script setup>
-import { Link, router } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
-import { Search, SlidersHorizontal, X, PackageSearch, ScanLine } from 'lucide-vue-next';
+import { Search, SlidersHorizontal, X, PackageSearch, ScanLine, Mic, Gift, Wallet, Sparkles, Loader2, Camera } from 'lucide-vue-next';
+import PhotoSearchButton from '@/Components/PhotoSearchButton.vue';
+import TripPicker from '@/Components/TripPicker.vue';
+import { openVoice } from '@/composables/assistant';
+import { postJson } from '@/composables/http';
 import QrScanner from '@/Components/QrScanner.vue';
 import Tip from '@/Components/Tip.vue';
 import AppShell from '@/Layouts/AppShell.vue';
@@ -14,7 +18,7 @@ import EmptyState from '@/Components/EmptyState.vue';
 import Pager from '@/Components/Pager.vue';
 import NearMe from '@/Components/NearMe.vue';
 
-const props = defineProps({ filters: Object, results: Object, stores: Array, states: Array, nearby: Boolean, seo: Object });
+const props = defineProps({ filters: Object, results: Object, stores: Array, states: Array, nearby: Boolean, seo: Object, understood: Object, wallet: Object });
 
 const f = reactive({ ...props.filters });
 const showFilters = ref(false);
@@ -22,17 +26,49 @@ const scanning = ref(false);
 const sorts = { relevance: 'Best match', newest: 'Newest', price_asc: 'Price: low to high', price_desc: 'Price: high to low' };
 const activeCount = computed(() => ['category', 'min', 'max', 'condition', 'state'].filter((k) => props.filters[k]).length + (props.filters.in_stock ? 1 : 0));
 
+// Plain-language understanding runs on SUBMIT only (ai=1; the server caches the parse
+// per query, so paging/sorting never calls the model again). "Search exactly" turns it off.
+const useAi = ref(!(new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('ai') === '0'));
 function apply(extra = {}) {
     const params = Object.fromEntries(
         Object.entries({ ...f, ...extra }).filter(([k, v]) => v !== null && v !== '' && v !== false && !(k === 'sort' && v === 'relevance')),
     );
     if (params.in_stock) params.in_stock = 1;
+    if (params.under_balance) params.under_balance = 1;
+    if (params.q && page.props.features?.shopperAi) params.ai = useAi.value ? 1 : 0;
+    panel.value = null;
     showFilters.value = false;
     router.get(route('search'), params, { preserveState: true, preserveScroll: true });
 }
 function clearAll() {
-    Object.assign(f, { category: null, min: null, max: null, condition: null, state: null, in_stock: false, sort: 'relevance' });
+    Object.assign(f, { category: null, min: null, max: null, condition: null, state: null, in_stock: false, under_balance: false, sort: 'relevance' });
     apply();
+}
+function searchExactly() {
+    useAi.value = false;
+    apply();
+}
+function toggleBalance() {
+    f.under_balance = !f.under_balance;
+    apply();
+}
+
+// Photo match / "What can I get?" results (JSON, shown in place of the normal grid).
+const page = usePage();
+const panel = ref(null); // { kind, title, preview?, items, message, loading }
+function photoStart({ preview }) { panel.value = { kind: 'photo', title: 'Photo matches', preview, items: [], loading: true, message: null }; }
+function photoDone(res) {
+    panel.value = { kind: 'photo', title: 'Photo matches', preview: res.preview, items: res.items || [], loading: false, message: res.ok === false || !res.items?.length ? res.message : null };
+}
+function photoFail(e) { panel.value = { kind: 'photo', title: 'Photo matches', preview: e.preview, items: [], loading: false, message: e.message }; }
+async function whatCanIGet() {
+    panel.value = { kind: 'budget', title: `What you can get with ${props.wallet?.available}`, items: [], loading: true, message: null };
+    try {
+        const res = await postJson(route('assistant.budget'), { wish: f.q || '' });
+        panel.value = { ...panel.value, items: res.items || [], loading: false, message: res.message, ideas: res.ideas };
+    } catch (e) {
+        panel.value = { ...panel.value, loading: false, message: e.status === 429 ? 'Give it a minute and try again.' : 'That didn’t go through. Try again.' };
+    }
 }
 </script>
 
@@ -43,16 +79,32 @@ function clearAll() {
             <div class="flex gap-2">
                 <div class="relative flex-1">
                     <Search :size="19" class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-400" />
-                    <input v-model="f.q" type="search" autofocus placeholder="Search products, stores, categories" class="input rounded-full py-3 pl-11 pr-12 shadow-soft" enterkeyhint="search" />
-                    <Tip label="Scan a QR code" side="bottom" class="!absolute right-1.5 top-1/2 -translate-y-1/2">
-                        <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-500 transition hover:bg-ink-100 hover:text-ink-900" aria-label="Scan a QR code" @click="scanning = true"><ScanLine :size="18" /></button>
-                    </Tip>
+                    <input v-model="f.q" type="search" autofocus :placeholder="$page.props.features?.shopperAi ? 'Try “black heels near me under 20k”' : 'Search products, stores, categories'" class="input rounded-full py-3 pl-11 shadow-soft" :class="$page.props.features?.photoSearch ? 'pr-[7.5rem]' : 'pr-24'" enterkeyhint="search" />
+                    <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center">
+                        <Tip label="Shop with me (voice)" side="bottom">
+                            <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-500 transition hover:bg-ink-100 hover:text-brand-700" aria-label="Shop with me by voice" @click="openVoice"><Mic :size="18" /></button>
+                        </Tip>
+                        <PhotoSearchButton v-if="$page.props.features?.photoSearch" :under-balance="!!f.under_balance" @start="photoStart" @results="photoDone" @error="photoFail" />
+                        <Tip label="Scan a QR code" side="bottom">
+                            <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-500 transition hover:bg-ink-100 hover:text-ink-900" aria-label="Scan a QR code" @click="scanning = true"><ScanLine :size="18" /></button>
+                        </Tip>
+                    </div>
                 </div>
                 <button type="button" class="btn-ghost relative rounded-full px-4 lg:hidden" aria-label="Filters" @click="showFilters = !showFilters">
                     <SlidersHorizontal :size="18" />
                     <span v-if="activeCount" class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-[11px] font-bold text-white">{{ activeCount }}</span>
                 </button>
                 <button class="btn-primary hidden rounded-full px-6 sm:inline-flex">Search</button>
+            </div>
+            <!-- Shopper helpers: each one only runs when tapped. -->
+            <div class="no-scrollbar -mx-3 mt-2.5 flex gap-2 overflow-x-auto px-3 pb-0.5 sm:-mx-4 sm:px-4 md:mx-0 md:px-0">
+                <button v-if="wallet" type="button" class="chip" :class="filters.under_balance && 'chip-active'" @click="toggleBalance">
+                    <Wallet :size="15" :class="filters.under_balance ? '' : 'text-brand-600'" /> Under my balance · {{ wallet.available }}
+                </button>
+                <button v-if="wallet && wallet.available_minor > 0" type="button" class="chip" @click="whatCanIGet"><Sparkles :size="15" class="text-brand-600" /> What can I get?</button>
+                <Link :href="route('gift')" class="chip"><Gift :size="15" class="text-rose-500" /> Gift ideas</Link>
+                <TripPicker />
+                <button type="button" class="chip" @click="openVoice"><Mic :size="15" class="text-brand-600" /> Shop with me</button>
             </div>
         </form>
 
@@ -112,7 +164,35 @@ function clearAll() {
             </aside>
 
             <section class="min-w-0">
-                <template v-if="results">
+                <!-- Photo match / "What can I get?" results -->
+                <template v-if="panel">
+                    <div class="mb-4 flex items-center gap-3">
+                        <img v-if="panel.preview" :src="panel.preview" alt="Your photo" class="h-14 w-14 shrink-0 rounded-2xl object-cover ring-2 ring-brand-200" />
+                        <div class="min-w-0 flex-1">
+                            <h2 class="section-title">{{ panel.title }}</h2>
+                            <p class="text-xs text-ink-500"><template v-if="panel.loading">Looking through stock nearby…</template><template v-else-if="panel.items.length">{{ panel.items.length }} in stock{{ $page.props.near ? ', nearest first' : '' }}</template></p>
+                        </div>
+                        <NearMe />
+                        <button type="button" class="icon-btn" aria-label="Close" @click="panel = null"><X :size="18" /></button>
+                    </div>
+                    <div v-if="panel.loading" class="flex h-40 items-center justify-center"><Loader2 :size="26" class="animate-spin text-brand-500" /></div>
+                    <ProductGrid v-else-if="panel.items.length" :products="panel.items" dense />
+                    <EmptyState v-else :title="panel.kind === 'photo' ? 'No look-alikes yet' : 'Nothing yet'" :body="panel.message || 'Try again in a moment.'" color="#0891b2">
+                        <template #icon><Camera v-if="panel.kind === 'photo'" :size="28" /><PackageSearch v-else :size="28" /></template>
+                        <button class="btn-ghost" @click="panel = null">Back to search</button>
+                    </EmptyState>
+                </template>
+
+                <template v-else-if="results">
+                    <!-- Plain-language understanding (only when the model parsed the query) -->
+                    <div v-if="understood" class="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-brand-100 bg-brand-50/70 px-3.5 py-2.5 text-sm">
+                        <Sparkles :size="15" class="shrink-0 text-brand-600" />
+                        <span class="font-medium text-ink-700">Showing</span>
+                        <span v-for="c in understood.chips" :key="c" class="rounded-full bg-white px-2.5 py-0.5 text-xs font-semibold text-brand-800 ring-1 ring-brand-100">{{ c }}</span>
+                        <NearMe v-if="understood.ask_location" />
+                        <button type="button" class="ml-auto text-xs font-semibold text-brand-700 hover:underline" @click="searchExactly">Search exactly “{{ understood.original }}”</button>
+                    </div>
+
                     <div v-if="stores.length" class="mb-6">
                         <h2 class="section-title mb-3">Stores</h2>
                         <div class="no-scrollbar -mx-3 flex gap-3 overflow-x-auto px-3 pb-2 sm:-mx-4 sm:px-4 md:mx-0 md:px-0">

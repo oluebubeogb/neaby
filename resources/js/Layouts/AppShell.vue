@@ -6,8 +6,9 @@
  *  - desktop (≥1024):  248px sidebar, collapsible to 76px (persisted)
  */
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
-import { ArrowLeft, ChevronsLeft, ChevronsRight, LogIn, LogOut, MessageCircle, Plus, Search, Settings, Store } from 'lucide-vue-next';
+import { computed, defineAsyncComponent, ref } from 'vue';
+import { ArrowLeft, ChevronsLeft, ChevronsRight, LogIn, LogOut, MessageCircle, Mic, Plus, Search, Settings, Store } from 'lucide-vue-next';
+import { assistant, openVoice } from '@/composables/assistant';
 import CartIcon from '@/Components/icons/CartIcon.vue';
 import CallOverlay from '@/Components/CallOverlay.vue';
 import Wordmark from '@/Components/Wordmark.vue';
@@ -35,8 +36,11 @@ const { collapsed, toggle } = useSidebar();
 
 const q = ref('');
 function submitSearch() {
-    router.get(route('search'), q.value ? { q: q.value } : {});
+    // ai=1: a plain-language query may get ONE parse on the server (cached); typing never calls it.
+    router.get(route('search'), q.value ? { q: q.value, ...(page.props.features?.shopperAi ? { ai: 1 } : {}) } : {});
 }
+// Voice "shop with me" — loaded and opened only when the shopper taps a mic.
+const VoicePanel = defineAsyncComponent(() => import('@/Components/VoicePanel.vue'));
 </script>
 
 <template>
@@ -95,7 +99,8 @@ function submitSearch() {
             <div class="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4 no-scrollbar">
                 <form v-if="!collapsed" class="relative mb-3 mt-1" role="search" @submit.prevent="submitSearch">
                     <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
-                    <input v-model="q" type="search" placeholder="Search neaby" class="w-full rounded-2xl border-0 bg-ink-100/80 py-2.5 pl-10 pr-3 text-sm placeholder:text-ink-400 focus:bg-white focus:ring-2 focus:ring-brand-200" />
+                    <input v-model="q" type="search" placeholder="Search neaby" class="w-full rounded-2xl border-0 bg-ink-100/80 py-2.5 pl-10 pr-10 text-sm placeholder:text-ink-400 focus:bg-white focus:ring-2 focus:ring-brand-200" />
+                    <button type="button" class="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-xl text-ink-500 transition hover:bg-white hover:text-brand-700" aria-label="Shop with me by voice" title="Shop with me (voice)" @click="openVoice"><Mic :size="16" /></button>
                 </form>
 
                 <nav class="flex flex-col gap-0.5">
@@ -179,6 +184,7 @@ function submitSearch() {
                         <Link v-if="user" :href="route('messages.index')" class="icon-btn relative" aria-label="Messages"><MessageCircle :size="20" /><span v-if="counts.messages" class="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-red-500 px-1 text-center text-[9.5px] font-bold leading-4 text-white">{{ counts.messages > 9 ? '9+' : counts.messages }}</span></Link>
                         <Link v-if="user && counts.cart" :href="route('cart.index')" data-cart-target class="icon-btn relative" aria-label="Cart"><CartIcon :size="20" /><span class="absolute right-0.5 top-0.5 min-w-[16px] rounded-full bg-brand-600 px-1 text-center text-[9.5px] font-bold leading-4 text-white">{{ counts.cart }}</span></Link>
                         <Link v-if="!route().current('search')" :href="route('search')" class="icon-btn" aria-label="Search"><Search :size="20" /></Link>
+                        <button v-if="route().current('search')" type="button" class="icon-btn" aria-label="Shop with me by voice" @click="openVoice"><Mic :size="20" /></button>
                         <Link v-if="user" :href="route('profile.show')" aria-label="Profile"><Avatar :src="user.avatar" :initials="user.initials" :size="32" /></Link>
                         <Link v-else :href="route('login')" class="btn-sm btn-dark">Sign in</Link>
                     </div>
@@ -232,5 +238,6 @@ function submitSearch() {
 
         <Flash />
         <CallOverlay v-if="user" />
+        <VoicePanel v-if="assistant.voiceOpen" />
     </div>
 </template>

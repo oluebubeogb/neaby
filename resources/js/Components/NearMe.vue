@@ -3,9 +3,10 @@ import { computed, onMounted } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import { Loader2, LocateFixed, MapPin, X } from 'lucide-vue-next';
 import Tip from '@/Components/Tip.vue';
+import TripPicker from '@/Components/TripPicker.vue';
 import { disableLocation, enableLocation, nearState, syncLocation } from '@/composables/location';
 
-/** Small "Near me" chip: one tap asks for location; when on, shows the area with a way to turn it off. */
+/** Small "Near me" chip: one tap asks for location; when on, shows the area with a way to turn it off. On a trip it shows the trip instead. */
 defineProps({ dark: Boolean });
 const page = usePage();
 const near = computed(() => page.props.near);
@@ -15,7 +16,8 @@ onMounted(() => syncLocation(page.props.near));
 </script>
 
 <template>
-    <div v-if="near?.precise" class="inline-flex items-center gap-1 rounded-full py-1 pl-3 pr-1 text-xs font-semibold" :class="dark ? 'bg-white/10 text-white ring-1 ring-white/15' : 'bg-brand-50 text-brand-800 ring-1 ring-brand-100'">
+    <TripPicker v-if="near?.trip" :dark="dark" />
+    <div v-else-if="near?.precise" class="inline-flex items-center gap-1 rounded-full py-1 pl-3 pr-1 text-xs font-semibold" :class="dark ? 'bg-white/10 text-white ring-1 ring-white/15' : 'bg-brand-50 text-brand-800 ring-1 ring-brand-100'">
         <MapPin :size="13" />
         <span class="max-w-[9rem] truncate">{{ label }}</span>
         <Tip label="Stop using my location" side="bottom" :dark="dark">

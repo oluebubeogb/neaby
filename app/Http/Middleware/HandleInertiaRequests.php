@@ -45,10 +45,15 @@ class HandleInertiaRequests extends Middleware
                 'sponsored' => (bool) config('neaby.sponsored.enabled'),
                 'wallet' => (bool) config('neaby.wallet.enabled', true),
                 'sandbox' => fn () => app(\App\Services\Payments\PaymentManager::class)->provider()->name() === 'fake',
+                // AI shopping flags: plain config checks — nothing here touches Replicate or RunPod.
+                'photoSearch' => filled(config('neaby.clip.token')),
+                'shopperAi' => fn () => app(\App\Services\Ai\ShopperAi::class)->enabled(),
+                'voice' => true, // browser speech; works with offline intent rules when the model is off
+                'gifts' => true,
             ],
             'categories' => fn () => Category::menu(),
             // Shopper location (nearby-first). Only the area name goes to the client.
-            'near' => fn () => ($n = \App\Services\Geo\Near::current()) ? ['city' => $n->city, 'state' => $n->state, 'precise' => $n->hasCoords()] : null,
+            'near' => fn () => ($n = \App\Services\Geo\Near::current()) ? ['city' => $n->city, 'state' => $n->state, 'precise' => $n->hasCoords(), 'trip' => $n->trip] : null,
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

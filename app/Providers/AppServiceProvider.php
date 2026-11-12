@@ -35,6 +35,11 @@ class AppServiceProvider extends ServiceProvider
             };
         });
 
+        // AI shopping: Replicate CLIP (image vectors) + shopper word tasks on the LISTING_AI_* endpoint.
+        $this->app->singleton(\App\Services\Ai\ReplicateClip::class, fn () => \App\Services\Ai\ReplicateClip::make());
+        $this->app->singleton(\App\Services\Ai\ShopperAi::class, fn () => \App\Services\Ai\ShopperAi::make());
+        $this->app->singleton(\App\Services\Ai\Embeddings::class);
+
         $this->app->singleton(PaymentManager::class);
         $this->app->bind(PaymentProvider::class, fn ($app) => $app->make(PaymentManager::class)->provider());
         // Per-request memo of entitlement keys (Octane-safe).
@@ -79,6 +84,11 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::define('admin', fn (User $user) => $user->isAdmin());
 
+        \App\Models\ProductImage::observe(\App\Observers\ProductImageObserver::class);
+
+        // Shopper AI (NL parse, Q&A, gift, budget, voice) and photo search (Replicate).
+        RateLimiter::for('shopper-ai', fn (Request $r) => [Limit::perMinute(20)->by('sa:'.($r->user()?->id ?: $r->ip())), Limit::perDay(400)->by('sad:'.($r->user()?->id ?: $r->ip()))]);
+        RateLimiter::for('photo-search', fn (Request $r) => [Limit::perMinute(8)->by('ps:'.($r->user()?->id ?: $r->ip())), Limit::perDay(150)->by('psd:'.($r->user()?->id ?: $r->ip()))]);
         RateLimiter::for('ai', fn (Request $r) => Limit::perMinute(12)->by($r->user()?->id ?: $r->ip()));
         RateLimiter::for('uploads', fn (Request $r) => Limit::perMinute(30)->by($r->user()?->id ?: $r->ip()));
         RateLimiter::for('webhooks', fn (Request $r) => Limit::perMinute(120)->by($r->ip()));

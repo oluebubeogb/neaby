@@ -20,8 +20,9 @@ import SeoHead from '@/Components/SeoHead.vue';
 import Avatar from '@/Components/Avatar.vue';
 import IconCircle from '@/Components/IconCircle.vue';
 import ProductGrid from '@/Components/ProductGrid.vue';
+import AskListing from '@/Components/AskListing.vue';
 
-const props = defineProps({ product: Object, isOwner: Boolean, isSaved: Boolean, canBuy: Boolean, resale: Object, resaleAvailable: Boolean, shareUrl: String, moreFromStore: Array, similar: Array, seo: Object });
+const props = defineProps({ product: Object, isOwner: Boolean, isSaved: Boolean, canBuy: Boolean, resale: Object, resaleAvailable: Boolean, shareUrl: String, moreFromStore: Array, similar: Array, completeTheLook: { type: Array, default: () => [] }, canAsk: Boolean, seo: Object });
 const page = usePage();
 const signedIn = computed(() => !!page.props.auth?.user);
 const qty = ref(1);
@@ -60,6 +61,7 @@ function addToCart(buyNow = false) {
 const immersive = ref(false);
 const immersiveItems = computed(() => [
     { id: props.product.id, slug: props.product.slug, title: props.product.title, price: props.product.price, compare_at: props.product.compare_at, image: images.value[0]?.url || null, city: props.product.city, travel: props.product.travel, store: store.value },
+    ...(props.completeTheLook || []),
     ...(props.moreFromStore || []),
     ...(props.similar || []),
 ].filter((p, i, a) => a.findIndex((x) => x.slug === p.slug) === i));
@@ -274,6 +276,8 @@ const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 te
                     <p v-if="product.title_ai_generated" class="mt-4 inline-flex items-center gap-1.5 text-xs text-ink-400"><Sparkles :size="12" /> Title suggested by neaby AI from the seller's description</p>
                 </div>
 
+                <AskListing v-if="canAsk && !isOwner && $page.props.features?.shopperAi" :slug="product.slug" />
+
                 <div class="mt-8 grid grid-cols-2 gap-3">
                     <div class="surface flex items-center gap-3 p-4">
                         <IconCircle color="#16b26a" :size="40"><Package :size="18" /></IconCircle>
@@ -287,6 +291,12 @@ const statusTone = { draft: 'bg-ink-100 text-ink-700', pending: 'bg-amber-100 te
             </section>
         </div>
 
+        <!-- Precomputed from photo vectors: other categories that go with this item. -->
+        <section v-if="completeTheLook.length" class="mt-12">
+            <h2 class="section-title mb-1">Complete the look</h2>
+            <p class="mb-4 text-sm text-ink-500">Goes well with this — in stock{{ $page.props.near ? ', nearest first' : '' }}.</p>
+            <ProductGrid :products="completeTheLook" dense />
+        </section>
         <section v-if="moreFromStore.length" class="mt-12">
             <h2 class="section-title mb-4">More from {{ store?.name }}</h2>
             <ProductGrid :products="moreFromStore" :show-store="false" dense />
