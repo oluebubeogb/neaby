@@ -51,6 +51,9 @@ return [
         'timeout' => (int) env('REPLICATE_TIMEOUT', 60),
         'dimensions' => 768,
         'batch' => (int) env('REPLICATE_CLIP_BATCH', 8),
+        // Max prediction-creates per minute (Replicate reduces new/low-spend accounts to 6). 0 = no pacing.
+        'rpm' => (int) env('REPLICATE_CLIP_RPM', 6),
+        'retries' => (int) env('REPLICATE_CLIP_RETRIES', 8),
         // Cosine similarity below this is "not a match" for photo search.
         'min_similarity' => (float) env('NEABY_PHOTO_MIN_SIMILARITY', 0.6),
         'max_attempts' => (int) env('NEABY_EMBED_MAX_ATTEMPTS', 5),

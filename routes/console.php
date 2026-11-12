@@ -72,7 +72,9 @@ Artisan::command('neaby:embeddings:backfill {--limit=0 : Stop after this many ph
 
         return 0;
     }
-    $this->info("Embedding {$todo} product photo(s) with ".$embeddings->model().'…');
+    $rpm = (int) config('neaby.clip.rpm', 6);
+    $pace = $rpm > 0 ? " (paced at {$rpm} predictions/minute to stay under Replicate’s limit)" : '';
+    $this->info("Embedding {$todo} product photo(s) with ".$embeddings->model().$pace.'…');
     $bar = $this->output->createProgressBar($todo);
     $done = ['embedded' => 0, 'failed' => 0];
     $products = [];

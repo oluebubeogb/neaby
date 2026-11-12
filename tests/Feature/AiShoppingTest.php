@@ -187,6 +187,31 @@ class AiShoppingTest extends TestCase
             && str_ends_with($r['input']['inputs'], '/storage/products/shoe.png'));
     }
 
+    public function test_clip_retries_a_rate_limit_and_does_not_burn_the_photo(): void
+    {
+        Storage::fake('public');
+        Queue::fake();
+        $this->clipOn();
+        config(['neaby.clip.rpm' => 0]);
+        $vec = $this->vec(3);
+        Http::fake([self::REPLICATE => Http::sequence()
+            ->push(['detail' => 'Request was throttled. Your rate limit for creating predictions is reduced to 6 requests per minute.'], 429, ['Retry-After' => '0'])
+            ->push(['status' => 'succeeded', 'output' => [['input' => 'ignored', 'embedding' => $vec]]])
+        ]);
+        $p = $this->product($this->store('Throttle Shop'), 'Blue shoe');
+        $file = UploadedFile::fake()->image('shoe.png', 40, 40);
+        Storage::disk('public')->putFileAs('products', $file, 'blue.png');
+        $img = $p->images()->create(['path' => 'products/blue.png', 'sort' => 1]);
+
+        $this->artisan('neaby:embeddings:backfill')->expectsOutputToContain('Embedded 1')->assertSuccessful();
+
+        $row = DB::table('product_images')->where('id', $img->id)->first();
+        $this->assertNotNull($row->embedding);
+        $this->assertSame(0, (int) $row->embedding_attempts);
+        $this->assertNull($row->embedding_failed_at);
+        Http::assertSentCount(2);
+    }
+
     // ── Photo match ─────────────────────────────────────────────────────────
 
     public function test_photo_search_is_calm_when_switched_off(): void

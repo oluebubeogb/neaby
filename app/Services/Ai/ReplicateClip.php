@@ -131,36 +131,133 @@ class ReplicateClip
         $version = $this->version();
         $body = ['input' => ['inputs' => $inputs]];
         $wait = ['Prefer' => 'wait'];
+        $tries = max(1, (int) ($this->config['retries'] ?? 8));
+        $res = null;
 
-        $res = $version
-            ? $this->http()->withHeaders($wait)->post('/predictions', $body + ['version' => $version])
-            : $this->http()->withHeaders($wait)->post('/models/'.$this->model().'/predictions', $body);
+        for ($try = 1; $try <= $tries; $try++) {
+            $this->waitForSlot();
+            $res = $version
+                ? $this->http()->withHeaders($wait)->post('/predictions', $body + ['version' => $version])
+                : $this->http()->withHeaders($wait)->post('/models/'.$this->model().'/predictions', $body);
 
-        // Stale cached version → resolve again once.
-        if ($version && in_array($res->status(), [404, 422], true) && blank($this->config['version'] ?? null)) {
-            Cache::forget($this->versionCacheKey());
-            if (($fresh = $this->version(refresh: true)) && $fresh !== $version) {
-                $res = $this->http()->withHeaders($wait)->post('/predictions', $body + ['version' => $fresh]);
+            // Stale cached version → resolve again once.
+            if ($version && in_array($res->status(), [404, 422], true) && blank($this->config['version'] ?? null)) {
+                Cache::forget($this->versionCacheKey());
+                if (($fresh = $this->version(refresh: true)) && $fresh !== $version) {
+                    $version = $fresh;
+                    $this->waitForSlot();
+                    $res = $this->http()->withHeaders($wait)->post('/predictions', $body + ['version' => $fresh]);
+                }
+            }
+
+            // Low-spend Replicate accounts are capped at 6 prediction-creates/minute.
+            if ($res->status() === 429 && $try < $tries) {
+                $sec = $this->retryAfter($res);
+                Log::notice('Replicate CLIP rate-limited, retrying', ['wait' => $sec, 'try' => $try]);
+                if ($sec > 0) {
+                    sleep($sec);
+                }
+
+                continue;
+            }
+
+            $res->throw();
+            $prediction = (array) $res->json();
+
+            $deadline = microtime(true) + max(5, (int) ($this->config['timeout'] ?? 60));
+            while (in_array($prediction['status'] ?? null, ['starting', 'processing'], true) && microtime(true) < $deadline) {
+                $get = $prediction['urls']['get'] ?? (isset($prediction['id']) ? '/predictions/'.$prediction['id'] : null);
+                if (! $get) {
+                    break;
+                }
+                usleep(800_000);
+                $prediction = (array) $this->http()->get($get)->throw()->json();
+            }
+
+            if (($prediction['status'] ?? null) !== 'succeeded') {
+                throw new \RuntimeException('prediction '.($prediction['status'] ?? 'unknown').': '.json_encode($prediction['error'] ?? null));
+            }
+
+            return $prediction;
+        }
+
+        $res?->throw();
+
+        throw new \RuntimeException('Replicate CLIP rate-limited after '.$tries.' tries');
+    }
+
+    /**
+     * Space prediction-creates so we stay under REPLICATE_CLIP_RPM (default 6).
+     * 0 disables pacing (tests). 429 retries are the safety net if the window was already used.
+     */
+    private function waitForSlot(): void
+    {
+        $rpm = (int) ($this->config['rpm'] ?? 6);
+        if ($rpm <= 0) {
+            return;
+        }
+        $key = 'replicate:clip:creates';
+        $interval = 60 / $rpm;
+        $deadline = microtime(true) + 180;
+
+        while (microtime(true) < $deadline) {
+            $sleep = 0.0;
+            $this->withThrottleLock(function () use ($key, $rpm, $interval, &$sleep) {
+                $now = microtime(true);
+                $times = array_values(array_filter((array) Cache::get($key, []), fn ($t) => $t > $now - 60));
+                $sinceLast = $times ? ($now - max($times)) : $interval;
+                if (count($times) < $rpm && $sinceLast >= $interval - 0.05) {
+                    $times[] = $now;
+                    Cache::put($key, $times, 120);
+                    $sleep = 0;
+
+                    return;
+                }
+                $untilCount = $times ? (60 - ($now - min($times))) : 0;
+                $untilInterval = $times ? ($interval - ($now - max($times))) : 0;
+                $sleep = max(0.25, min(15, max($untilCount, $untilInterval) + 0.1));
+            });
+            if ($sleep <= 0) {
+                return;
+            }
+            usleep((int) ($sleep * 1_000_000));
+        }
+    }
+
+    private function withThrottleLock(callable $fn): void
+    {
+        try {
+            $lock = Cache::lock('replicate:clip:throttle', 15);
+            $lock->block(15);
+            try {
+                $fn();
+            } finally {
+                $lock->release();
+            }
+        } catch (\Throwable) {
+            $fn(); // file/array stores may not lock; 429 retry still covers us
+        }
+    }
+
+    /** @param  \Illuminate\Http\Client\Response  $res */
+    private function retryAfter($res, int $default = 12): int
+    {
+        $h = $res->header('Retry-After');
+        if (is_numeric($h)) {
+            return max(0, min(60, (int) $h));
+        }
+        if (is_string($h) && $h !== '') {
+            $at = strtotime($h);
+            if ($at !== false) {
+                return max(0, min(60, $at - time()));
             }
         }
-        $res->throw();
-        $prediction = (array) $res->json();
-
-        $deadline = microtime(true) + max(5, (int) ($this->config['timeout'] ?? 60));
-        while (in_array($prediction['status'] ?? null, ['starting', 'processing'], true) && microtime(true) < $deadline) {
-            $get = $prediction['urls']['get'] ?? (isset($prediction['id']) ? '/predictions/'.$prediction['id'] : null);
-            if (! $get) {
-                break;
-            }
-            usleep(800_000);
-            $prediction = (array) $this->http()->get($get)->throw()->json();
+        $detail = (string) ($res->json('detail') ?? $res->body());
+        if (preg_match('/retry after (\d+)/i', $detail, $m)) {
+            return max(0, min(60, (int) $m[1]));
         }
 
-        if (($prediction['status'] ?? null) !== 'succeeded') {
-            throw new \RuntimeException('prediction '.($prediction['status'] ?? 'unknown').': '.json_encode($prediction['error'] ?? null));
-        }
-
-        return $prediction;
+        return $default;
     }
 
     private function versionCacheKey(): string
